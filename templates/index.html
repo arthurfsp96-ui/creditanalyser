@@ -1,0 +1,1238 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dashboard — Análise de Crédito</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:        #0a0e1a;
+    --bg2:       #0f1525;
+    --bg3:       #141c30;
+    --border:    #1e2d4a;
+    --border2:   #243352;
+    --navy:      #0d1f3c;
+    --steel:     #1a4a8a;
+    --accent:    #c8102e;
+    --accent2:   #e8272a;
+    --gold:      #f4a22d;
+    --teal:      #00d4aa;
+    --blue:      #3b82f6;
+    --text:      #e2e8f0;
+    --text2:     #94a3b8;
+    --text3:     #64748b;
+    --green:     #22c55e;
+    --red:       #ef4444;
+    --orange:    #f59e0b;
+    --mono:      'IBM Plex Mono', monospace;
+    --sans:      'IBM Plex Sans', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Scanlines overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0,0,0,0.03) 2px, rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+    z-index: 9999;
+  }
+
+  /* ─── HEADER ─── */
+  .header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 56px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo {
+    font-family: var(--mono);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text);
+    letter-spacing: 0.05em;
+  }
+  .logo span { color: var(--accent); }
+  .tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-weight: 500;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .tag-blue  { background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.25); }
+  .tag-green { background: rgba(34,197,94,0.15);  color: #4ade80; border: 1px solid rgba(34,197,94,0.25); }
+  .tag-red   { background: rgba(200,16,46,0.2);   color: #f87171; border: 1px solid rgba(200,16,46,0.3); }
+  .tag-gold  { background: rgba(244,162,45,0.15); color: #fbbf24; border: 1px solid rgba(244,162,45,0.25); }
+
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--text3);
+  }
+  .clock { color: var(--teal); }
+
+  /* ─── LAYOUT ─── */
+  .container { max-width: 1280px; margin: 0 auto; padding: 24px; }
+
+  .grid-main { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-macro { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+
+  /* ─── PANELS ─── */
+  .panel {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .panel-header {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .panel-title {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text2);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .panel-title::before {
+    content: '';
+    width: 3px;
+    height: 12px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+  .panel-body { padding: 16px; }
+
+  /* ─── STEPS ─── */
+  .steps {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 24px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .step {
+    flex: 1;
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-right: 1px solid var(--border);
+    transition: background 0.2s;
+    cursor: default;
+  }
+  .step:last-child { border-right: none; }
+  .step.active { background: rgba(200,16,46,0.08); }
+  .step.done { background: rgba(34,197,94,0.06); }
+  .step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    flex-shrink: 0;
+    border: 1.5px solid var(--border2);
+    color: var(--text3);
+    transition: all 0.3s;
+  }
+  .step.active .step-num { border-color: var(--accent); color: var(--accent); background: rgba(200,16,46,0.1); }
+  .step.done .step-num   { border-color: var(--green); color: var(--green); background: rgba(34,197,94,0.1); }
+  .step-info { flex: 1; }
+  .step-label { font-size: 11px; font-weight: 600; color: var(--text); }
+  .step.active .step-label { color: var(--accent); }
+  .step.done .step-label   { color: var(--green); }
+  .step-desc { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+
+  /* ─── UPLOAD ZONE ─── */
+  .upload-zone {
+    border: 1.5px dashed var(--border2);
+    border-radius: 4px;
+    padding: 24px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+    position: relative;
+    background: rgba(255,255,255,0.01);
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(200,16,46,0.04); }
+  .upload-zone.loaded { border-color: var(--green); border-style: solid; background: rgba(34,197,94,0.04); }
+  .upload-zone input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+  .upload-icon {
+    font-size: 28px;
+    margin-bottom: 8px;
+    filter: grayscale(0.3);
+  }
+  .upload-label { font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 4px; }
+  .upload-hint  { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+  .upload-zone.loaded .upload-label { color: var(--green); }
+  .file-name {
+    margin-top: 8px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--teal);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* ─── INPUTS ─── */
+  .input-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .input-group { display: flex; flex-direction: column; gap: 4px; }
+  .input-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .input-label .dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-green  { background: var(--green); }
+  .dot-orange { background: var(--orange); }
+  .dot-blue   { background: var(--blue); }
+  .dot-gold   { background: var(--gold); }
+  .dot-red    { background: var(--red); }
+  .dot-teal   { background: var(--teal); }
+
+  .input-wrap { position: relative; }
+  .input-wrap input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    padding: 7px 40px 7px 10px;
+    font-family: var(--mono);
+    font-size: 13px;
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+    -moz-appearance: textfield;
+  }
+  .input-wrap input::-webkit-outer-spin-button,
+  .input-wrap input::-webkit-inner-spin-button { -webkit-appearance: none; }
+  .input-wrap input:focus { border-color: var(--accent); }
+  .input-unit {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text3);
+    pointer-events: none;
+  }
+  .input-wrap input:focus + .input-unit { color: var(--accent); }
+
+  /* Range slider */
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-row input[type=range] {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 3px;
+    background: var(--border2);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px; height: 14px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    transition: transform 0.15s;
+  }
+  .slider-row input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.3); }
+  .slider-val {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--gold);
+    min-width: 52px;
+    text-align: right;
+  }
+
+  /* ─── BOTÃO GERAR ─── */
+  .btn-generate {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    border: none;
+    padding: 14px 24px;
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 8px;
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-generate::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.08), transparent);
+    transform: translateX(-100%);
+    transition: transform 0.5s;
+  }
+  .btn-generate:hover::after { transform: translateX(100%); }
+  .btn-generate:hover { background: var(--accent2); transform: translateY(-1px); box-shadow: 0 4px 20px rgba(200,16,46,0.4); }
+  .btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .btn-generate .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .btn-upload {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--text2);
+    padding: 8px 16px;
+    font-family: var(--mono);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: all 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .btn-upload:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-upload.active { border-color: var(--teal); color: var(--teal); background: rgba(0,212,170,0.07); }
+
+  /* ─── STATUS LOG ─── */
+  .log {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    line-height: 1.7;
+    max-height: 180px;
+    overflow-y: auto;
+    color: var(--text3);
+  }
+  .log::-webkit-scrollbar { width: 4px; }
+  .log::-webkit-scrollbar-track { background: transparent; }
+  .log::-webkit-scrollbar-thumb { background: var(--border2); }
+  .log-line { display: flex; gap: 8px; }
+  .log-time { color: var(--text3); flex-shrink: 0; }
+  .log-ok   { color: var(--green); }
+  .log-err  { color: var(--red); }
+  .log-info { color: var(--blue); }
+  .log-warn { color: var(--orange); }
+  .log-acc  { color: var(--accent); }
+
+  /* ─── KPI CARDS ─── */
+  .kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+  .kpi-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 12px 14px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 2px;
+  }
+  .kpi-card.kpi-green::before  { background: var(--green); }
+  .kpi-card.kpi-red::before    { background: var(--red); }
+  .kpi-card.kpi-orange::before { background: var(--orange); }
+  .kpi-card.kpi-blue::before   { background: var(--blue); }
+  .kpi-card.kpi-gold::before   { background: var(--gold); }
+  .kpi-card.kpi-teal::before   { background: var(--teal); }
+  .kpi-label { font-family: var(--mono); font-size: 9px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .kpi-value { font-family: var(--mono); font-size: 18px; font-weight: 600; }
+  .kpi-card.kpi-green  .kpi-value { color: var(--green); }
+  .kpi-card.kpi-red    .kpi-value { color: var(--red); }
+  .kpi-card.kpi-orange .kpi-value { color: var(--orange); }
+  .kpi-card.kpi-blue   .kpi-value { color: var(--blue); }
+  .kpi-card.kpi-gold   .kpi-value { color: var(--gold); }
+  .kpi-card.kpi-teal   .kpi-value { color: var(--teal); }
+  .kpi-sub  { font-family: var(--mono); font-size: 9px; color: var(--text3); margin-top: 2px; }
+
+  /* ─── TABLE ─── */
+  .data-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .data-table th {
+    background: var(--bg3);
+    padding: 7px 10px;
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text3);
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid rgba(30,45,74,0.5);
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .data-table tr:last-child td { border-bottom: none; }
+  .data-table tr:hover td { background: rgba(255,255,255,0.02); }
+  .td-right { text-align: right; }
+  .td-ok    { color: var(--green); font-weight: 600; }
+  .td-warn  { color: var(--orange); font-weight: 600; }
+  .td-err   { color: var(--red); font-weight: 600; }
+
+  /* ─── PROGRESS BAR ─── */
+  .progress-wrap { background: var(--border); border-radius: 2px; height: 4px; overflow: hidden; }
+  .progress-bar  { height: 100%; background: var(--accent); border-radius: 2px; transition: width 0.4s ease; }
+
+  /* ─── DIVIDERS ─── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  .section-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--text3);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* ─── BADGE ─── */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 2px;
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 600;
+  }
+  .badge-green  { background: rgba(34,197,94,0.12);   color: #4ade80; }
+  .badge-orange { background: rgba(245,158,11,0.12);  color: #fbbf24; }
+  .badge-red    { background: rgba(239,68,68,0.12);   color: #f87171; }
+
+  /* ─── TOOLTIP ─── */
+  [data-tip] { position: relative; cursor: help; }
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-size: 10px;
+    padding: 5px 10px;
+    border-radius: 3px;
+    white-space: nowrap;
+    z-index: 200;
+    font-family: var(--mono);
+    pointer-events: none;
+  }
+
+  /* ─── ANIMAÇÕES ─── */
+  @keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+  @keyframes pulse  { 0%,100% { opacity:1; } 50% { opacity:0.5; } }
+  .fade-in  { animation: fadeIn 0.4s ease both; }
+  .pulse    { animation: pulse 2s ease-in-out infinite; }
+  .blink    { animation: pulse 1s ease-in-out infinite; }
+
+  /* ─── TICKER ─── */
+  .ticker-bar {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+    padding: 5px 0;
+    overflow: hidden;
+    white-space: nowrap;
+    font-family: var(--mono);
+    font-size: 11px;
+  }
+  .ticker-inner { display: inline-block; animation: ticker 40s linear infinite; }
+  @keyframes ticker { from { transform: translateX(100vw); } to { transform: translateX(-100%); } }
+  .ticker-item { display: inline-flex; align-items: center; gap: 6px; margin-right: 40px; }
+  .ticker-name { color: var(--text2); }
+  .ticker-val  { color: var(--gold); font-weight: 500; }
+  .ticker-chg.up   { color: var(--green); }
+  .ticker-chg.down { color: var(--red); }
+
+  /* ─── MANUAL OVERRIDE ─── */
+  .override-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(30,45,74,0.5);
+    gap: 12px;
+  }
+  .override-row:last-child { border-bottom: none; }
+  .override-name { font-size: 11px; color: var(--text2); flex: 1; }
+  .override-val  {
+    font-family: var(--mono);
+    font-size: 13px;
+    font-weight: 500;
+    min-width: 80px;
+    text-align: right;
+    color: var(--gold);
+  }
+
+  /* ─── RESPONSIVE ─── */
+  @media (max-width: 900px) {
+    .grid-main { grid-template-columns: 1fr; }
+    .grid-macro { grid-template-columns: 1fr 1fr; }
+    .kpi-grid { grid-template-columns: 1fr 1fr; }
+    .steps { flex-direction: column; }
+    .step { border-right: none; border-bottom: 1px solid var(--border); }
+  }
+</style>
+</head>
+<body>
+
+<!-- Ticker -->
+<div class="ticker-bar">
+  <div class="ticker-inner" id="tickerInner">
+    <span class="ticker-item"><span class="ticker-name" id="tk-empresa-nome">—</span> <span class="ticker-val" id="tk-csna3">—</span></span>
+    <span class="ticker-item"><span class="ticker-name">USD/BRL</span> <span class="ticker-val" id="tk-usdbrl">5,80</span></span>
+    <span class="ticker-item"><span class="ticker-name">SELIC</span> <span class="ticker-val">14,75%</span></span>
+    <span class="ticker-item"><span class="ticker-name">MINÉRIO Fe 62%</span> <span class="ticker-val" id="tk-minerio">US$ 102</span></span>
+    <span class="ticker-item"><span class="ticker-name">HRC CHINA</span> <span class="ticker-val" id="tk-hrc">US$ 575</span></span>
+    <span class="ticker-item"><span class="ticker-name">IPCA ACUM.</span> <span class="ticker-val">5,00% a.a.</span></span>
+    <span class="ticker-item"><span class="ticker-name">TREASURY 10Y</span> <span class="ticker-val">4,30%</span></span>
+    <span class="ticker-item"><span class="ticker-name">EBITDA</span> <span class="ticker-val" id="tk-ebitda-val">—</span></span>
+    <span class="ticker-item"><span class="ticker-name">DL/EBITDA</span> <span class="ticker-val">3,47x</span></span>
+    <span class="ticker-item"><span class="ticker-name">SPREAD ALVO</span> <span class="ticker-val">400–450 bps</span></span>
+  </div>
+</div>
+
+<!-- Header -->
+<header class="header">
+  <div class="header-left">
+    <div class="logo">CREDIT<span>.</span>DESK</div>
+    <span class="tag tag-blue" id="header-ticker">—</span>
+    <span class="tag tag-red">ANÁLISE DE CRÉDITO</span>
+    <span class="tag tag-gold">DFP 31/12/2025</span>
+  </div>
+  <div class="header-right">
+    <span>DASHBOARD v1.0</span>
+    <span class="clock" id="clock">—</span>
+  </div>
+</header>
+
+<!-- Main -->
+<div class="container">
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step active" id="step1">
+      <div class="step-num">01</div>
+      <div class="step-info">
+        <div class="step-label">Upload de Documentos</div>
+        <div class="step-desc">DFP + FRE em PDF</div>
+      </div>
+    </div>
+    <div class="step" id="step2">
+      <div class="step-num">02</div>
+      <div class="step-info">
+        <div class="step-label">Extração de Dados</div>
+        <div class="step-desc">Parser automático</div>
+      </div>
+    </div>
+    <div class="step" id="step3">
+      <div class="step-num">03</div>
+      <div class="step-info">
+        <div class="step-label">Premissas Macro</div>
+        <div class="step-desc">Inserção manual</div>
+      </div>
+    </div>
+    <div class="step" id="step4">
+      <div class="step-num">04</div>
+      <div class="step-info">
+        <div class="step-label">Gerar Relatório</div>
+        <div class="step-desc">PDF institucional</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Grid principal -->
+  <div class="grid-main">
+
+    <!-- COLUNA ESQUERDA -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Upload DFP -->
+      <div class="panel fade-in">
+        <div class="panel-header">
+          <span class="panel-title">Documentos Fonte</span>
+          <span class="tag tag-green" id="docs-status">0/2 carregados</span>
+        </div>
+        <div class="panel-body" style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <div class="section-label">DFP — Demonstrações Financeiras</div>
+            <div class="upload-zone" id="dfp-zone" ondragover="ev.preventDefault();this.classList.add('drag')"
+                 ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'dfp')">
+              <input type="file" accept=".pdf" id="dfp-input" onchange="handleFile('dfp')">
+              <div class="upload-icon">📄</div>
+              <div class="upload-label" id="dfp-label">Arraste ou clique para selecionar</div>
+              <div class="upload-hint" id="dfp-hint">DFP 31/12/2025 · PDF · max 100MB</div>
+              <div class="file-name" id="dfp-fname"></div>
+            </div>
+          </div>
+          <div>
+            <div class="section-label">FRE — Formulário de Referência</div>
+            <div class="upload-zone" id="fre-zone" ondragover="event.preventDefault();this.classList.add('drag')"
+                 ondragleave="this.classList.remove('drag')" ondrop="handleDrop(event,'fre')">
+              <input type="file" accept=".pdf" id="fre-input" onchange="handleFile('fre')">
+              <div class="upload-icon">📋</div>
+              <div class="upload-label" id="fre-label">Arraste ou clique para selecionar</div>
+              <div class="upload-hint" id="fre-hint">FRE 2024/2025 · PDF · max 150MB</div>
+              <div class="file-name" id="fre-fname"></div>
+            </div>
+          </div>
+          <button class="btn-upload active" id="btn-processar" onclick="processarDocs()" disabled>
+            ⚡ Processar documentos
+          </button>
+          <div class="progress-wrap">
+            <div class="progress-bar" id="upload-progress" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="panel fade-in" style="animation-delay:0.1s">
+        <div class="panel-header">
+          <span class="panel-title">Log de Processamento</span>
+          <button onclick="clearLog()" style="background:none;border:none;color:var(--text3);cursor:pointer;font-size:10px;font-family:var(--mono)">limpar</button>
+        </div>
+        <div class="panel-body" style="padding:0;">
+          <div class="log" id="log">
+            <div class="log-line"><span class="log-time">00:00:00</span><span class="log-info">Sistema inicializado. Aguardando documentos...</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Dados extraídos -->
+      <div class="panel fade-in" style="animation-delay:0.2s" id="extracted-panel">
+        <div class="panel-header">
+          <span class="panel-title">Dados Extraídos — DFP</span>
+          <span class="badge badge-orange" id="extract-badge">Aguardando</span>
+        </div>
+        <div class="panel-body">
+          <div class="kpi-grid" id="kpi-grid">
+            <div class="kpi-card kpi-green"><div class="kpi-label">EBITDA Aj.</div><div class="kpi-value" id="k-ebitda">—</div><div class="kpi-sub">R$ milhões</div></div>
+            <div class="kpi-card kpi-orange"><div class="kpi-label">Dív. Líquida</div><div class="kpi-value" id="k-dl">—</div><div class="kpi-sub">R$ milhões</div></div>
+            <div class="kpi-card kpi-blue"><div class="kpi-label">Alavancagem</div><div class="kpi-value" id="k-alav">—</div><div class="kpi-sub">DL/EBITDA</div></div>
+            <div class="kpi-card kpi-teal"><div class="kpi-label">Caixa</div><div class="kpi-value" id="k-caixa">—</div><div class="kpi-sub">R$ milhões</div></div>
+            <div class="kpi-card kpi-red"><div class="kpi-label">Resultado Fin.</div><div class="kpi-value" id="k-rf">—</div><div class="kpi-sub">R$ milhões</div></div>
+            <div class="kpi-card kpi-gold"><div class="kpi-label">Mg. EBITDA</div><div class="kpi-value" id="k-mg">—</div><div class="kpi-sub">% ajustada</div></div>
+          </div>
+          <table class="data-table" id="seg-table" style="display:none">
+            <thead>
+              <tr>
+                <th>Segmento</th>
+                <th class="td-right">Receita</th>
+                <th class="td-right">EBITDA Aj.</th>
+                <th class="td-right">Margem</th>
+              </tr>
+            </thead>
+            <tbody id="seg-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- COLUNA DIREITA -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Premissas macro -->
+      <div class="panel fade-in" style="animation-delay:0.05s">
+        <div class="panel-header">
+          <span class="panel-title">Premissas Macroeconômicas</span>
+          <span class="tag tag-gold">Edição manual</span>
+        </div>
+        <div class="panel-body">
+          <div class="section-label" style="margin-bottom:14px">Câmbio e Juros Brasil</div>
+          <div class="input-grid">
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-gold"></span>USD / BRL</div>
+              <div class="slider-row">
+                <input type="range" id="s-usd" min="4.00" max="8.00" step="0.05" value="5.80" oninput="syncSlider('usd')">
+                <span class="slider-val" id="sv-usd">R$ 5,80</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-usd" value="5.80" step="0.05" min="4" max="8" oninput="syncInput('usd')">
+                <span class="input-unit">R$</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-orange"></span>Selic (% a.a.)</div>
+              <div class="slider-row">
+                <input type="range" id="s-selic" min="8.00" max="22.00" step="0.25" value="14.75" oninput="syncSlider('selic')">
+                <span class="slider-val" id="sv-selic">14,75%</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-selic" value="14.75" step="0.25" min="8" max="22" oninput="syncInput('selic')">
+                <span class="input-unit">%</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-blue"></span>IPCA (% a.a.)</div>
+              <div class="slider-row">
+                <input type="range" id="s-ipca" min="2.00" max="12.00" step="0.25" value="5.00" oninput="syncSlider('ipca')">
+                <span class="slider-val" id="sv-ipca">5,00%</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-ipca" value="5.00" step="0.25" min="2" max="12" oninput="syncInput('ipca')">
+                <span class="input-unit">%</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-teal"></span>CDI (% a.a.)</div>
+              <div class="slider-row">
+                <input type="range" id="s-cdi" min="7.00" max="22.00" step="0.25" value="14.65" oninput="syncSlider('cdi')">
+                <span class="slider-val" id="sv-cdi">14,65%</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-cdi" value="14.65" step="0.25" min="7" max="22" oninput="syncInput('cdi')">
+                <span class="input-unit">%</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label" style="margin: 16px 0 14px">Commodities</div>
+          <div class="input-grid">
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-red"></span>Minério Fe 62% (US$/t)</div>
+              <div class="slider-row">
+                <input type="range" id="s-minerio" min="60" max="160" step="1" value="102" oninput="syncSlider('minerio')">
+                <span class="slider-val" id="sv-minerio">US$ 102</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-minerio" value="102" step="1" min="60" max="160" oninput="syncInput('minerio')">
+                <span class="input-unit">US$/t</span>
+              </div>
+            </div>
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-gold"></span>HRC China Export (US$/t)</div>
+              <div class="slider-row">
+                <input type="range" id="s-hrc" min="350" max="900" step="5" value="575" oninput="syncSlider('hrc')">
+                <span class="slider-val" id="sv-hrc">US$ 575</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-hrc" value="575" step="5" min="350" max="900" oninput="syncInput('hrc')">
+                <span class="input-unit">US$/t</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="section-label" style="margin: 16px 0 14px">Mercados Internacionais</div>
+          <div class="input-grid" style="grid-template-columns:1fr">
+            <div class="input-group">
+              <div class="input-label"><span class="dot dot-blue"></span>Treasury 10Y EUA (%)</div>
+              <div class="slider-row">
+                <input type="range" id="s-t10y" min="2.00" max="7.00" step="0.05" value="4.30" oninput="syncSlider('t10y')">
+                <span class="slider-val" id="sv-t10y">4,30%</span>
+              </div>
+              <div class="input-wrap">
+                <input type="number" id="i-t10y" value="4.30" step="0.05" min="2" max="7" oninput="syncInput('t10y')">
+                <span class="input-unit">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Resumo de impactos em tempo real -->
+      <div class="panel fade-in" style="animation-delay:0.15s">
+        <div class="panel-header">
+          <span class="panel-title">Impactos Calculados em Tempo Real</span>
+          <span class="badge badge-green blink" id="rt-badge">● AO VIVO</span>
+        </div>
+        <div class="panel-body" style="padding:0 16px 4px">
+          <div id="impactos-list">
+            <div class="override-row">
+              <span class="override-name">Alavancagem estimada (atual)</span>
+              <span class="override-val" id="rt-alav">3,47x</span>
+            </div>
+            <div class="override-row">
+              <span class="override-name">Yield alvo bonds (spread 425bps)</span>
+              <span class="override-val" id="rt-yield">8,55%</span>
+            </div>
+            <div class="override-row">
+              <span class="override-name">Impacto Selic +1pp (desp. fin.)</span>
+              <span class="override-val" id="rt-selic-imp">—</span>
+            </div>
+            <div class="override-row">
+              <span class="override-name">Impacto Minério +US$10/t (EBITDA)</span>
+              <span class="override-val" id="rt-min-imp">—</span>
+            </div>
+            <div class="override-row">
+              <span class="override-name">Cobertura Caixa / Venc. 2026</span>
+              <span class="override-val" id="rt-cob">152%</span>
+            </div>
+            <div class="override-row">
+              <span class="override-name">Cenário base: DL/EBITDA 2026E</span>
+              <span class="override-val" id="rt-cen">—</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Gerar PDF -->
+      <div class="panel fade-in" style="animation-delay:0.25s">
+        <div class="panel-header">
+          <span class="panel-title">Geração do Relatório</span>
+        </div>
+        <div class="panel-body">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+            <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em">Recomendação</div>
+              <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--accent)">MANTER</div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px">Bonds 2026–2028</div>
+            </div>
+            <div style="background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.08em">Rating Implícito</div>
+              <div style="font-family:var(--mono);font-size:16px;font-weight:700;color:var(--steel)">B1 / BB-</div>
+              <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-top:2px">Estimativa independente</div>
+            </div>
+          </div>
+          <div style="margin-bottom:12px;font-size:11px;color:var(--text2);line-height:1.6">
+            O relatório incluirá: sumário executivo, premissas macro com valores abaixo, 
+            DRE consolidada, análise por segmento, cronograma de vencimentos, 
+            sensibilidade a câmbio/selic/minério, cenários e matriz de riscos.
+          </div>
+          <button class="btn-generate" id="btn-gerar" onclick="gerarRelatorio()">
+            <span id="gerar-icon">⬇</span>
+            <span id="gerar-text">Gerar Análise de Crédito em PDF</span>
+          </button>
+          <div style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center">
+            Se não houver documentos carregados, usa dados padrão da DFP 31/12/2025
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── STATE ─────────────────────────────────────────────────────────────────
+const state = {
+  dfpFile: null, freFile: null,
+  dfpData: null, freData: null,
+  processed: false,
+};
+
+const MACRO_DEFAULTS = {
+  usd: 5.80, selic: 14.75, ipca: 5.00,
+  cdi: 14.65, minerio: 102, hrc: 575, t10y: 4.30
+};
+
+// ─── CLOCK ─────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+}
+updateClock();
+setInterval(updateClock, 1000);
+
+// ─── LOG ───────────────────────────────────────────────────────────────────
+function log(msg, type='info') {
+  const el = document.getElementById('log');
+  const now = new Date().toLocaleTimeString('pt-BR');
+  const line = document.createElement('div');
+  line.className = 'log-line';
+  line.innerHTML = `<span class="log-time">${now}</span><span class="log-${type}">${msg}</span>`;
+  el.appendChild(line);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('log').innerHTML = ''; }
+
+// ─── FILE HANDLING ──────────────────────────────────────────────────────────
+function handleDrop(e, tipo) {
+  e.preventDefault();
+  const zone = document.getElementById(`${tipo}-zone`);
+  zone.classList.remove('drag');
+  const file = e.dataTransfer.files[0];
+  if (file && file.type === 'application/pdf') setFile(tipo, file);
+}
+
+function handleFile(tipo) {
+  const input = document.getElementById(`${tipo}-input`);
+  if (input.files[0]) setFile(tipo, input.files[0]);
+}
+
+function setFile(tipo, file) {
+  state[`${tipo}File`] = file;
+  const zone  = document.getElementById(`${tipo}-zone`);
+  const label = document.getElementById(`${tipo}-label`);
+  const hint  = document.getElementById(`${tipo}-hint`);
+  const fname = document.getElementById(`${tipo}-fname`);
+  zone.classList.add('loaded');
+  label.textContent = '✓ Arquivo selecionado';
+  hint.textContent  = `${(file.size/1024/1024).toFixed(1)} MB`;
+  fname.textContent = file.name;
+  log(`${tipo.toUpperCase()} carregado: ${file.name} (${(file.size/1024/1024).toFixed(1)}MB)`, 'ok');
+
+  const count = (state.dfpFile ? 1 : 0) + (state.freFile ? 1 : 0);
+  document.getElementById('docs-status').textContent = `${count}/2 carregados`;
+  document.getElementById('btn-processar').disabled = false;
+  document.getElementById('btn-processar').textContent = `⚡ Processar ${count}/2 documento(s)`;
+  setStep(count >= 2 ? 2 : 1);
+}
+
+// ─── STEP MANAGER ──────────────────────────────────────────────────────────
+function setStep(n) {
+  for (let i=1; i<=4; i++) {
+    const el = document.getElementById(`step${i}`);
+    el.className = 'step' + (i < n ? ' done' : (i === n ? ' active' : ''));
+  }
+}
+
+// ─── PROCESSAR ─────────────────────────────────────────────────────────────
+async function processarDocs() {
+  const btn = document.getElementById('btn-processar');
+  btn.disabled = true;
+  btn.textContent = '⏳ Processando...';
+  setStep(2);
+  animProgress(0, 60, 2000);
+  log('Iniciando extração de dados dos PDFs...', 'acc');
+
+  const formData = new FormData();
+  if (state.dfpFile) formData.append('dfp', state.dfpFile);
+  if (state.freFile) formData.append('fre', state.freFile);
+
+  try {
+    log('Enviando para o servidor de processamento...', 'info');
+    const res = await fetch('/api/upload', { method: 'POST', body: formData });
+    const data = await res.json();
+
+    animProgress(60, 100, 800);
+
+    if (data.dfp && Object.keys(data.dfp).length > 0) {
+      state.dfpData = data.dfp;
+      log(`DFP processada: ${data.dfp._linhas || '?'} linhas extraídas`, 'ok');
+      updateKPIs(data.dfp);
+      updateSegmentos(data.dfp);
+      document.getElementById('extract-badge').textContent = '✓ Extraído';
+      document.getElementById('extract-badge').className = 'badge badge-green';
+    }
+    if (data.fre && Object.keys(data.fre).length > 0) {
+      state.freData = data.fre;
+      log('FRE processado: cronograma de vencimentos e covenants OK', 'ok');
+    }
+    if (data.errors && data.errors.length > 0) {
+      data.errors.forEach(e => log(e, 'err'));
+    }
+
+    state.processed = true;
+    setStep(3);
+    log('Extração concluída. Configure as premissas macro e gere o relatório.', 'acc');
+    btn.textContent = '✓ Processado com sucesso';
+    btn.className   = 'btn-upload active';
+
+  } catch(e) {
+    log(`Erro: ${e.message}`, 'err');
+    log('Verifique se o servidor Flask está rodando (python app.py)', 'warn');
+    btn.disabled = false;
+    btn.textContent = '⚡ Tentar novamente';
+  }
+}
+
+function animProgress(from, to, duration) {
+  const bar = document.getElementById('upload-progress');
+  const start = performance.now();
+  function frame(now) {
+    const t = Math.min((now - start) / duration, 1);
+    bar.style.width = (from + (to - from) * t) + '%';
+    if (t < 1) requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+}
+
+// ─── ATUALIZAR KPIs ─────────────────────────────────────────────────────────
+function fmt(v) {
+  if (v == null || isNaN(v)) return '—';
+  return Math.abs(v) >= 1000 ? Math.round(v).toLocaleString('pt-BR') : v.toFixed(2).replace('.',',');
+}
+
+function updateKPIs(dfp) {
+  document.getElementById('k-ebitda').textContent = fmt(dfp.ebitda_ajustado);
+  document.getElementById('k-dl').textContent     = fmt(dfp.divida_liquida);
+  document.getElementById('k-alav').textContent   = (dfp.alavancagem||3.47).toFixed(2).replace('.',',')+'x';
+  document.getElementById('k-caixa').textContent  = fmt(dfp.caixa);
+  document.getElementById('k-rf').textContent     = fmt(dfp.resultado_financeiro);
+  document.getElementById('k-mg').textContent     = (dfp.margem_ebitda||25.1).toFixed(1).replace('.',',')+'%';
+  updateRealtimeCalcs(dfp);
+}
+
+function updateSegmentos(dfp) {
+  const tbl  = document.getElementById('seg-table');
+  const tbody = document.getElementById('seg-tbody');
+  const segs = [
+    ['Siderurgia', dfp.receita_siderurgia, dfp.ebitda_siderurgia],
+    ['Mineração',  dfp.receita_mineracao,  dfp.ebitda_mineracao],
+    ['Cimentos',   dfp.receita_cimentos,   dfp.ebitda_cimentos],
+    ['Logística',  dfp.receita_logistica,  dfp.ebitda_logistica],
+    ['Energia',    dfp.receita_energia,    dfp.ebitda_energia],
+  ];
+  tbody.innerHTML = segs.map(([nm, rc, eb]) => {
+    const mg = rc ? (eb/rc*100).toFixed(1) : '—';
+    const cls = parseFloat(mg) >= 30 ? 'td-ok' : parseFloat(mg) >= 20 ? '' : 'td-warn';
+    return `<tr>
+      <td>${nm}</td>
+      <td class="td-right">${fmt(rc)}</td>
+      <td class="td-right">${fmt(eb)}</td>
+      <td class="td-right ${cls}">${mg}%</td>
+    </tr>`;
+  }).join('');
+  tbl.style.display = 'table';
+}
+
+// ─── SLIDERS ───────────────────────────────────────────────────────────────
+const MACROS = {
+  usd:    { fmt: v => `R$ ${parseFloat(v).toFixed(2).replace('.',',')}` },
+  selic:  { fmt: v => `${parseFloat(v).toFixed(2).replace('.',',')}%` },
+  ipca:   { fmt: v => `${parseFloat(v).toFixed(2).replace('.',',')}%` },
+  cdi:    { fmt: v => `${parseFloat(v).toFixed(2).replace('.',',')}%` },
+  minerio:{ fmt: v => `US$ ${parseInt(v)}` },
+  hrc:    { fmt: v => `US$ ${parseInt(v)}` },
+  t10y:   { fmt: v => `${parseFloat(v).toFixed(2).replace('.',',')}%` },
+};
+
+function syncSlider(key) {
+  const val = document.getElementById(`s-${key}`).value;
+  document.getElementById(`i-${key}`).value = val;
+  document.getElementById(`sv-${key}`).textContent = MACROS[key].fmt(val);
+  onMacroChange();
+}
+function syncInput(key) {
+  const val = document.getElementById(`i-${key}`).value;
+  const slider = document.getElementById(`s-${key}`);
+  if (slider) slider.value = val;
+  document.getElementById(`sv-${key}`).textContent = MACROS[key].fmt(val);
+  onMacroChange();
+}
+
+function getMacro() {
+  return {
+    usd_brl:      parseFloat(document.getElementById('i-usd').value)    || 5.80,
+    selic:        parseFloat(document.getElementById('i-selic').value)  || 14.75,
+    ipca:         parseFloat(document.getElementById('i-ipca').value)   || 5.00,
+    cdi:          parseFloat(document.getElementById('i-cdi').value)    || 14.65,
+    minerio_fe:   parseFloat(document.getElementById('i-minerio').value)|| 102,
+    hrc:          parseFloat(document.getElementById('i-hrc').value)    || 575,
+    treasury_10y: parseFloat(document.getElementById('i-t10y').value)   || 4.30,
+  };
+}
+
+function onMacroChange() {
+  const m = getMacro();
+  // Atualizar ticker
+  document.getElementById('tk-usdbrl').textContent = `R$ ${m.usd_brl.toFixed(2).replace('.',',')}`;
+  document.getElementById('tk-minerio').textContent = `US$ ${m.minerio_fe}`;
+  document.getElementById('tk-hrc').textContent = `US$ ${m.hrc}`;
+  // Recalcular em tempo real
+  updateRealtimeCalcs(state.dfpData, m);
+}
+
+function updateRealtimeCalcs(dfp, macro) {
+  dfp   = dfp   || { ebitda_ajustado: 11796, divida_liquida: 41218, alavancagem: 3.47, caixa: 16000 };
+  macro = macro || getMacro();
+
+  const eb    = dfp.ebitda_ajustado   || 11796;
+  const dl    = dfp.divida_liquida    || 41218;
+  const alav  = dfp.alavancagem       || 3.47;
+  const caixa = dfp.caixa             || 16000;
+  const db    = (state.freData && state.freData.divida_bruta) || 52924;
+  const min_mt = dfp.volume_mineracao_mt || 45.849;
+
+  // Alavancagem
+  document.getElementById('rt-alav').textContent = alav.toFixed(2).replace('.',',') + 'x';
+
+  // Yield alvo
+  const yield_v = macro.treasury_10y + 4.25;
+  document.getElementById('rt-yield').textContent = yield_v.toFixed(2).replace('.',',') + '%';
+
+  // Impacto Selic
+  const divida_cdi = db * 0.27;
+  const imp_selic = (divida_cdi * 0.01);
+  document.getElementById('rt-selic-imp').textContent = `+R$ ${Math.round(imp_selic).toLocaleString('pt-BR')}mi`;
+
+  // Impacto minério
+  const imp_min = (min_mt * macro.usd_brl * 10 * 0.35);
+  document.getElementById('rt-min-imp').textContent = `+R$ ${Math.round(imp_min).toLocaleString('pt-BR')}mi`;
+
+  // Cobertura
+  const venc2026 = (state.freData && state.freData.vencimentos && state.freData.vencimentos['2026']) || 10523;
+  const cob = (caixa / venc2026 * 100).toFixed(0);
+  const cobEl = document.getElementById('rt-cob');
+  cobEl.textContent = cob + '%';
+  cobEl.style.color = cob >= 150 ? 'var(--green)' : cob >= 100 ? 'var(--orange)' : 'var(--red)';
+
+  // Cenário base 2026E
+  const eb_2026 = eb * (macro.minerio_fe / 105) * 1.05;
+  const dl_2026 = dl - 5000;
+  const alav_2026 = dl_2026 / eb_2026;
+  const cenEl = document.getElementById('rt-cen');
+  cenEl.textContent = alav_2026.toFixed(2).replace('.',',') + 'x';
+  cenEl.style.color = alav_2026 < 3.0 ? 'var(--green)' : alav_2026 < 4.0 ? 'var(--orange)' : 'var(--red)';
+}
+
+// ─── GERAR PDF ─────────────────────────────────────────────────────────────
+async function gerarRelatorio() {
+  const btn  = document.getElementById('btn-gerar');
+  const icon = document.getElementById('gerar-icon');
+  const text = document.getElementById('gerar-text');
+  btn.disabled = true;
+  icon.textContent = '⟳';
+  icon.className = 'spin';
+  text.textContent = 'Gerando relatório...';
+  setStep(4);
+  log('Iniciando geração do PDF...', 'acc');
+  const empNome = document.getElementById('i-empresa-nome').value || 'Empresa';
+  const empTk   = document.getElementById('i-empresa-ticker').value.toUpperCase() || 'TICK3';
+  log(`Empresa: ${empNome} (${empTk})`, 'info');
+  log(`Premissas: USD/BRL R$${getMacro().usd_brl.toFixed(2)} | Selic ${getMacro().selic.toFixed(2)}% | IPCA ${getMacro().ipca.toFixed(2)}% | Minério US$${getMacro().minerio_fe}/t`, 'info');
+
+  try {
+    const payload = {
+      dfp:   state.dfpData || null,
+      fre:   state.freData || null,
+      macro: getMacro(),
+      empresa_nome:      document.getElementById('i-empresa-nome').value || 'Empresa',
+      empresa_ticker:    document.getElementById('i-empresa-ticker').value.toUpperCase() || 'TICK3',
+      empresa_segmentos: document.getElementById('i-empresa-segs').value || '',
+    };
+
+    const res = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.error || 'Erro desconhecido');
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url;
+    const tkDown = document.getElementById("i-empresa-ticker").value.toUpperCase() || "Empresa";
+    a.download = `${tkDown}_Analise_Credito_${new Date().toISOString().slice(0,10)}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    log('✓ PDF gerado com sucesso! Download iniciado.', 'ok');
+    log(`Arquivo: ${tkDown}_Analise_Credito_${new Date().toISOString().slice(0,10)}.pdf`, 'ok');
+    setStep(4);
+    document.getElementById('step4').className = 'step done';
+
+  } catch(e) {
+    log(`Erro na geração: ${e.message}`, 'err');
+    log('Verifique se o servidor Flask está ativo (python app.py)', 'warn');
+  } finally {
+    btn.disabled = false;
+    icon.textContent = '⬇';
+    icon.className = '';
+    text.textContent = 'Gerar Análise de Crédito em PDF';
+  }
+}
+
+// ─── INIT ──────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', () => {
+  // Atualizar header quando empresa muda
+  function atualizarHeaderEmpresa() {
+    const nome = document.getElementById('i-empresa-nome').value || 'Empresa';
+    const tk   = document.getElementById('i-empresa-ticker').value.toUpperCase() || 'TICK3';
+    const el   = document.getElementById('header-ticker');
+    if (el) el.textContent = tk + ' · ' + nome;
+    const tkEl = document.getElementById('tk-empresa-nome');
+    if (tkEl) tkEl.textContent = tk;
+  }
+  const nomeEl = document.getElementById('i-empresa-nome');
+  const tkEl2  = document.getElementById('i-empresa-ticker');
+  if (nomeEl) nomeEl.addEventListener('input', atualizarHeaderEmpresa);
+  if (tkEl2)  tkEl2.addEventListener('input', atualizarHeaderEmpresa);
+  atualizarHeaderEmpresa();
+
+  onMacroChange();
+  log('Dashboard pronto. Carregue a DFP e o FRE para começar.', 'info');
+  log('Ou clique em "Gerar PDF" diretamente para usar dados padrão (DFP 31/12/2025).', 'warn');
+
+  // Atualizar sliders para exibir labels
+  Object.keys(MACROS).forEach(key => {
+    const input = document.getElementById(`i-${key}`);
+    if (input) syncInput(key);
+  });
+});
+</script>
+</body>
+</html>
