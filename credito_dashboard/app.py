@@ -66,31 +66,53 @@ def fv(text, patterns, default=None):
     return default
 
 def parse_dfp(text):
+    """Extrai dados da DFP. Retorna None para campos não encontrados (sem defaults CSN)."""
     d = {}
-    # Receita
-    d['receita_liquida']       = fv(text, [r'Receita.*?[Ll]íquida.*?(\d{1,3}(?:\.\d{3})*(?:,\d+)?)\s*\d'], 44798)
-    d['lucro_bruto']           = fv(text, [r'[Ll]ucro [Bb]ruto.*?(\d{1,3}(?:\.\d{3})*,\d+)'], 12394)
-    d['resultado_financeiro']  = fv(text, [r'[Rr]esultado [Ff]inanceiro.*?(-?\d{1,3}(?:\.\d{3})*,\d+)'], -6496)
-    d['lucro_liquido']         = fv(text, [r'[Pp]rejuízo.*?[Ll]íquido.*?bilh.*?(\d+[,\.]\d+)'], -1507)
-    if d['lucro_liquido'] and d['lucro_liquido'] > 0: d['lucro_liquido'] = -d['lucro_liquido']
+    if not text or len(text) < 100:
+        return d  # texto vazio — campos ficarão None
 
+    # Receita líquida
+    d['receita_liquida'] = fv(text, [
+        r'Receita\s+[Ll]íquida\s+de\s+[Vv]endas[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+        r'Receita\s+[Ll]íquida[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+    ])
+    d['lucro_bruto'] = fv(text, [r'[Ll]ucro\s+[Bb]ruto[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
+    d['resultado_financeiro'] = fv(text, [r'[Rr]esultado\s+[Ff]inanceiro[^\d]*(-?\d{1,3}(?:\.\d{3})*,\d+)'])
+    d['lucro_liquido'] = fv(text, [r'[Pp]rejuízo\s+[Ll]íquido[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
+    if d['lucro_liquido'] and d['lucro_liquido'] > 0:
+        d['lucro_liquido'] = -d['lucro_liquido']
+
+    # EBITDA
     m_eb = re.search(r'EBITDA\s+Ajustado.*?R\$\s*([\d,\.]+)\s*bilh', text, re.IGNORECASE|re.DOTALL)
     if m_eb:
         v = sf(m_eb.group(1))
-        d['ebitda_ajustado'] = v*1000 if v and v < 100 else (v or 11796)
-    else: d['ebitda_ajustado'] = 11796
+        d['ebitda_ajustado'] = v*1000 if v and v < 100 else v
+    else:
+        d['ebitda_ajustado'] = fv(text, [r'EBITDA[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
 
-    d['margem_ebitda']  = round(d['ebitda_ajustado'] / d['receita_liquida'] * 100, 1) if d['receita_liquida'] else 25.1
-    d['margem_bruta']   = round(d['lucro_bruto'] / d['receita_liquida'] * 100, 1) if d['receita_liquida'] else 27.7
-    d['divida_liquida'] = fv(text, [r'[Dd]ívida\s+[Ll]íquida.*?(\d{1,3}(?:\.\d{3})*,\d+)'], 41218)
-    d['caixa']          = fv(text, [r'caixa.*?R\$\s*([\d,]+)\s*bilh'], 16000)
-    if d['caixa'] and d['caixa'] < 200: d['caixa'] = d['caixa'] * 1000
-    d['alavancagem']    = fv(text, [r'(\d+[,\.]\d+)\s*x.*?EBITDA'], 3.47)
-    d['fco']            = fv(text, [r'[Ff]luxo.*?[Oo]peracional.*?(-?\d{1,3}(?:\.\d{3})*,\d+)'], -973)
-    d['capex']          = fv(text, [r'[Ii]nvestimentos.*?totalizaram.*?R\$\s*([\d,]+)\s*bilh'], 5936)
-    if d['capex'] and d['capex'] < 100: d['capex'] = d['capex'] * 1000
-    d['juros_pagos']    = 4268
-    d['resultado_fin_bruto'] = -8013
+    # Margens (calculadas se tiver os dados)
+    if d.get('ebitda_ajustado') and d.get('receita_liquida'):
+        d['margem_ebitda'] = round(d['ebitda_ajustado'] / d['receita_liquida'] * 100, 1)
+    if d.get('lucro_bruto') and d.get('receita_liquida'):
+        d['margem_bruta'] = round(d['lucro_bruto'] / d['receita_liquida'] * 100, 1)
+
+    # Dívida e caixa
+    d['divida_liquida'] = fv(text, [r'[Dd]ívida\s+[Ll]íquida[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
+    d['caixa'] = fv(text, [r'[Cc]aixa.*?R\$\s*([\d,]+)\s*bilh'])
+    if d.get('caixa') and d['caixa'] < 200: d['caixa'] *= 1000
+
+    # Alavancagem
+    if d.get('divida_liquida') and d.get('ebitda_ajustado') and d['ebitda_ajustado'] > 0:
+        d['alavancagem'] = round(d['divida_liquida'] / d['ebitda_ajustado'], 2)
+    else:
+        d['alavancagem'] = fv(text, [r'(\d+[,\.]\d+)\s*x.*?EBITDA'])
+
+    # FCO e Capex
+    d['fco'] = fv(text, [r'[Ff]luxo.*?[Oo]peracional.*?(-?\d{1,3}(?:\.\d{3})*,\d+)'])
+    d['capex'] = fv(text, [r'[Ii]nvestimentos.*?totalizaram.*?R\$\s*([\d,]+)\s*bilh'])
+    if d.get('capex') and d['capex'] < 100: d['capex'] *= 1000
+    d['juros_pagos'] = fv(text, [r'[Jj]uros\s+(?:pagos|incorridos)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
+    d['resultado_fin_bruto'] = fv(text, [r'[Dd]espesas?\s+[Ff]inanceiras[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
 
     # Segmentos
     d['receita_siderurgia'] = 22026; d['ebitda_siderurgia'] = 2194
@@ -103,20 +125,34 @@ def parse_dfp(text):
     return d
 
 def parse_fre(text):
+    """Extrai dados do FRE. Vencimentos ficam vazios se não encontrados."""
     d = {}
-    d['divida_bruta']   = 52924
-    d['divida_me_pct']  = 64.0
-    d['divida_brl_pct'] = 36.0
-    d['taxa_usd']       = 6.42
-    d['taxa_brl']       = 17.05
-    d['taxa_eur']       = 3.53
-    d['contingencias']  = 47419
-    d['hedge_usd_bi']   = 7.9
+    if not text or len(text) < 100:
+        d['vencimentos'] = {}
+        d['covenants_ok'] = True
+        return d
+
+    # Tentar extrair dívida bruta
+    d['divida_bruta'] = fv(text, [
+        r'[Dd]ívida\s+[Bb]ruta[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Ee]mpréstimos.*?total[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+
+    # Composição por moeda
+    d['divida_me_pct']  = fv(text, [r'[Mm]oeda\s+[Ee]strangeira[^\d]*(\d{1,2}[,\.]\d+)\s*%'])
+    d['divida_brl_pct'] = fv(text, [r'[Rr]eais[^\d]*(\d{1,2}[,\.]\d+)\s*%'])
+    d['taxa_usd']       = fv(text, [r'USD.*?(\d{1,2}[,\.]\d+)\s*%\s*a\.a'])
+    d['taxa_brl']       = fv(text, [r'CDI.*?(\d{2,3}[,\.]\d+)\s*%\s*a\.a'])
+    d['taxa_eur']       = fv(text, [r'EUR.*?(\d{1,2}[,\.]\d+)\s*%\s*a\.a'])
+    d['contingencias']  = fv(text, [r'[Cc]ontingências\s+[Pp]ossíveis[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
     d['covenants_ok']   = True
-    d['vencimentos'] = {
-        '2026': 10523, '2027': 7806, '2028': 11401,
-        '2029': 2474, '2030': 5952, '2031': 6605, 'apos_2031': 8831
-    }
+
+    # Vencimentos — tentar extrair da tabela do FRE
+    venc = {}
+    for ano in ['2026','2027','2028','2029','2030','2031']:
+        v = fv(text, [rf'{ano}[^\d]*(\d{{1,3}}(?:\.\d{{3}})*,\d+)'])
+        if v: venc[ano] = v
+    d['vencimentos'] = venc if venc else {}
     return d
 
 # ─── ESTILOS PDF ────────────────────────────────────────────────────────────────
@@ -178,7 +214,7 @@ def make_hf(macro):
         canvas.setFont('Helvetica-Bold', 7.5)
         canvas.drawString(ML, PAGE_H-0.65*cm, f"{_nome.upper()} — ANÁLISE DE CRÉDITO  |  CONFIDENCIAL")
         canvas.setFont('Helvetica', 7)
-        canvas.drawRightString(PAGE_W-MR, PAGE_H-0.65*cm, f'{_tk} | Data-base: 31/12/2025')
+        canvas.drawRightString(PAGE_W-MR, PAGE_H-0.65*cm, f"{_tk} | Data-base: {macro.get('empresa_database','31/12/2025')}")
         canvas.setFillColor(GRAY_BG)
         canvas.rect(0, 0, PAGE_W, 0.85*cm, fill=1, stroke=0)
         canvas.setFillColor(GRAY_MID)
@@ -213,7 +249,7 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     # Título
     canvas.setFillColor(HexColor('#94A3B8'))
     canvas.setFont('Helvetica', 9)
-    canvas.drawString(ML, PAGE_H*0.90, 'ANÁLISE DE CRÉDITO CORPORATIVO')
+    canvas.drawString(ML, PAGE_H*0.90, f"ANÁLISE DE CRÉDITO — {macro.get('empresa_ticker','').upper()}")
     canvas.setFillColor(colors.white)
     canvas.setFont('Helvetica-Bold', 26)
     canvas.drawString(ML, PAGE_H*0.82, macro.get('empresa_nome','Empresa')[:28])
@@ -223,7 +259,7 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.drawString(ML, PAGE_H*0.71, f"{macro.get('empresa_ticker','TICK3')}  ·  B3   |   {macro.get('empresa_segmentos','Segmentos da empresa')}")
     canvas.setFillColor(HexColor('#94A3B8'))
     canvas.setFont('Helvetica', 8)
-    canvas.drawString(ML, PAGE_H*0.67, f'Data-base: 31 dezembro 2025   |   USD/BRL: R$ {macro["usd_brl"]:.2f}   |   Selic: {macro["selic"]:.2f}%   |   IPCA: {macro["ipca"]:.2f}%')
+    canvas.drawString(ML, PAGE_H*0.67, f"Data-base: {macro.get('empresa_database','31/12/2025')}   |   USD/BRL: R$ {macro['usd_brl']:.2f}   |   Selic: {macro['selic']:.2f}%   |   IPCA: {macro['ipca']:.2f}%")
 
     # ── Badges de recomendação
     alav = dfp.get('alavancagem', 3.47)
@@ -235,7 +271,7 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.setFont('Helvetica', 7)
     canvas.drawCentredString(ML+54, by+31, 'RECOMENDAÇÃO')
     canvas.setFont('Helvetica-Bold', 16)
-    canvas.drawCentredString(ML+54, by+16, 'MANTER')
+    canvas.drawCentredString(ML+54, by+16, macro.get('recomendacao','MANTER'))
     canvas.setFont('Helvetica', 7)
     canvas.drawCentredString(ML+54, by+6, 'Bonds 2026–2028')
     # Badge 2 RATING
@@ -245,7 +281,7 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.setFont('Helvetica', 7)
     canvas.drawCentredString(ML+164, by+31, 'RATING IMPLÍCITO')
     canvas.setFont('Helvetica-Bold', 16)
-    canvas.drawCentredString(ML+164, by+16, 'B1 / BB-')
+    canvas.drawCentredString(ML+164, by+16, macro.get('rating','B1/BB-'))
     canvas.setFont('Helvetica', 7)
     canvas.drawCentredString(ML+164, by+6, 'Estimado')
     # Badge 3 ALAVANCAGEM
@@ -306,7 +342,8 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     ebitda = dfp.get('ebitda_ajustado', 11796)
     caixa = dfp.get('caixa', 16000)
     venc_2026 = fre.get('vencimentos', {}).get('2026', 10523)
-    resumo = (
+    tese_usuario = macro.get('tese_resumo','')
+    resumo = tese_usuario if tese_usuario else (
         f"CSN encerra 2025 com EBITDA Ajustado recorde de R$ {ebitda/1000:.1f}bi (+15,3% a/a; margem {dfp.get('margem_ebitda',25.1):.1f}%). "
         f"Alavancagem {alav:.2f}x acima do target 2,5x. FCO negativo R$ 0,97bi. "
         f"Caixa de R$ {caixa/1000:.1f}bi cobre {caixa/venc_2026*100:.0f}% dos vencimentos de curto prazo (R$ {venc_2026/1000:.1f}bi). "
@@ -400,13 +437,13 @@ def gerar_pdf(dfp, fre, macro):
     story.append(P(
         f'A {macro.get("empresa_nome","Empresa")} encerrou 2025 com receita líquida de R$ {rl/1000:.1f} bilhões e EBITDA Ajustado de '
         f'R$ {eb/1000:.1f} bilhões (margem {mg_eb:.1f}% — recorde histórico, +15,3% a/a). '
-        f'Não obstante o desempenho operacional robusto, o resultado financeiro '
+        f'O resultado financeiro '
         f'de R$ {abs(rf)/1000:.1f} bilhões — impactado por despesas com juros de R$ {juros/1000:.1f} bilhões '
         f'e variação cambial negativa — conduziu ao segundo prejuízo líquido consecutivo (R$ {abs(ll)/1000:.1f} bilhões). '
         f'A alavancagem atingiu {alav:.2f}x Dívida Líquida/EBITDA, acima do guidance interno de 2,5x, porém com '
         f'caixa gerencial de R$ {caixa/1000:.1f} bilhões cobrindo {caixa/venc_2026*100:.0f}% da dívida de curto prazo. '
-        f'Em janeiro/2026, o Conselho de Administração aprovou plano estruturado de desinvestimentos '
-        f'de R$ 15-18 bilhões como principal vetor de desalavancagem.', s['body']))
+        f''
+        f'', s['body']))
     story.append(SP(4))
 
     # Tabela KPI
@@ -474,7 +511,7 @@ def gerar_pdf(dfp, fre, macro):
         ['CDI (% a.a.)',           f'{cdi:.2f}%',         'Rendimento aplicações financeiras + dívida',  f'Proxy Selic menos spread'],
         ['Minério Fe 62% (US$/t)', f'US$ {minerio:.0f}', 'Receita e EBITDA mineração (~41% margem)',     f'US$10/t = ±R$ {imp_min_10/1000:.1f}bi EBITDA'],
         ['HRC China Export (US$/t)',f'US$ {hrc:.0f}',    'Receita siderurgia (referência de preço)',     f'US$50/t = ±R$ 0,8bi receita'],
-        ['Treasury 10Y EUA (%)',   f'{t10y:.2f}%',        'Benchmark bonds USD (SID 2026/2028)',          f'Yield alvo: {t10y+4.25:.2f}% = spread ~425 bps'],
+        ['Treasury 10Y EUA (%)',   f'{t10y:.2f}%',        f"Benchmark dívida USD — {macro.get('empresa_ticker','')}",          f'Yield alvo: {t10y+macro.get("spread_alvo",425)/100:.2f}% = spread ~{macro.get("spread_alvo",425)} bps'],
     ]
     md = [mac_hdr] + [[P(r[j], s['tl'] if j==0 else (s['tlb'] if j==1 else s['tl'])) for j in range(4)] for r in mac_rows]
     story.append(tbl(md, [W*0.22, W*0.14, W*0.32, W*0.32]))
@@ -484,7 +521,7 @@ def gerar_pdf(dfp, fre, macro):
     # 3. RESULTADOS OPERACIONAIS
     # ────────────────────────────────────────────────────────────────────
     story.append(PageBreak())
-    story += [P('3. RESULTADOS OPERACIONAIS 2025', s['sh']), HR()]
+    story += [P(f"3. RESULTADOS OPERACIONAIS — {macro.get('empresa_database','2025').split('/')[-1] if '/' in macro.get('empresa_database','2025') else macro.get('empresa_database','2025')}", s['sh']), HR()]
 
     # DRE
     story.append(P('3.1 Demonstração de Resultado Consolidada', s['ssh']))
@@ -514,18 +551,17 @@ def gerar_pdf(dfp, fre, macro):
     story.append(P('3.2 Desempenho por Segmento', s['ssh']))
     seg_hdr = [P('Segmento', s['th']), P('Receita (R$ mi)', s['th']), P('% Total', s['th']),
                P('EBITDA Aj. (R$ mi)', s['th']), P('Mg. EBITDA', s['th']), P('Destaque', s['th'])]
-    segs = [
-        ('Siderurgia',  dfp.get('receita_siderurgia',22026),  dfp.get('ebitda_siderurgia',2194),
-         'Queda volumes; HRC China pressionando preços'),
-        ('Mineração',   dfp.get('receita_mineracao',15401),   dfp.get('ebitda_mineracao',6309),
-         f'Margem 41%; âncora de caixa. {vol_min_mt:.1f} Mt exportadas'),
-        ('Cimentos',    dfp.get('receita_cimentos',4906),     dfp.get('ebitda_cimentos',1290),
-         f'Alvo de alienação no plano 2026. {dfp.get("volume_cimentos_kt",13393)/1000:.0f} Mt'),
-        ('Logística',   dfp.get('receita_logistica',4374),    dfp.get('ebitda_logistica',1933),
-         'Melhor margem histórica (44%). MRS prorrogada até 2041'),
-        ('Energia',     dfp.get('receita_energia',682),       dfp.get('ebitda_energia',255),
-         'Contribuição marginal; 37% margem'),
+    # Segmentos: usar dados do usuário, ignorar segmentos sem receita
+    _segs_raw = [
+        (dfp.get('seg1_nome','') or dfp.get('receita_siderurgia') and 'Siderurgia', dfp.get('receita_siderurgia'), dfp.get('ebitda_siderurgia')),
+        (dfp.get('seg2_nome','') or dfp.get('receita_mineracao') and 'Mineração',   dfp.get('receita_mineracao'),   dfp.get('ebitda_mineracao')),
+        (dfp.get('seg3_nome','') or dfp.get('receita_cimentos') and 'Cimentos',    dfp.get('receita_cimentos'),    dfp.get('ebitda_cimentos')),
+        (dfp.get('seg4_nome','') or dfp.get('receita_logistica') and 'Logística',  dfp.get('receita_logistica'),   dfp.get('ebitda_logistica')),
+        (dfp.get('seg5_nome','') or dfp.get('receita_energia') and 'Energia',      dfp.get('receita_energia'),     dfp.get('ebitda_energia')),
     ]
+    segs = [(nm, rc or 0, eb or 0, '') for nm, rc, eb in _segs_raw if nm and rc and rc > 0]
+    if not segs:
+        segs = []  # Sem segmentos — pula a tabela
     sd = [seg_hdr] + [
         [P(nm, s['tl']), P(f'{rc_s:,.0f}', s['tc']),
          P(f'{rc_s/rl*100:.1f}%', s['tc']),
@@ -543,12 +579,19 @@ def gerar_pdf(dfp, fre, macro):
     story.append(PageBreak())
     story += [P('4. ESTRUTURA DE CAPITAL E ALAVANCAGEM', s['sh']), HR()]
 
-    story.append(P(f'A dívida bruta consolidada atingiu R$ {db/1000:.1f} bilhões em 31/12/2025 '
-        f'(vs. R$ 57,6 bilhões em 2024). Composição: {fre.get("divida_me_pct",64):.0f}% em moeda estrangeira '
-        f'(USD {fre.get("taxa_usd",6.42):.2f}% a.a.; EUR {fre.get("taxa_eur",3.53):.2f}% a.a.) e '
-        f'{fre.get("divida_brl_pct",36):.0f}% em BRL ({fre.get("taxa_brl",17.05):.2f}% a.a.). '
-        f'O hedge cambial designado cobre US$ {fre.get("hedge_usd_bi",7.9):.1f} bilhões em bonds e '
-        f'pré-pagamentos de exportação, todas as relações eficazes em 31/12/2025.', s['body']))
+    _db_txt = f'A dívida bruta consolidada atingiu R$ {db/1000:.1f} bilhões na data-base.' if db > 0 else 'Dívida bruta não informada.'
+    _me = fre.get('divida_me_pct')
+    _brl = fre.get('divida_brl_pct')
+    _tusd = fre.get('taxa_usd')
+    _tbrl = fre.get('taxa_brl')
+    _comp = ''
+    if _me and _brl:
+        _comp = f' Composição: {_me:.0f}% em moeda estrangeira'
+        if _tusd: _comp += f' (USD {_tusd:.2f}% a.a.)'
+        _comp += f' e {_brl:.0f}% em BRL'
+        if _tbrl: _comp += f' ({_tbrl:.2f}% a.a.)'
+        _comp += '.'
+    story.append(P(_db_txt + _comp, s['body']))
     story.append(SP(4))
 
     story.append(P('4.1 Cronograma de Vencimentos', s['ssh']))
@@ -576,6 +619,27 @@ def gerar_pdf(dfp, fre, macro):
     vd = [vh] + [[P(r[0],s['tlb'] if 'TOTAL' in r[0] else s['tl'])] + [P(r[j],s['tc']) for j in range(1,5)] + [P(r[5],s['tl'])] for r in vrows]
     story.append(tbl(vd, [W*0.11,W*0.15,W*0.11,W*0.14,W*0.14,W*0.35], vrc))
     story.append(SP(4))
+
+    # Composição da dívida por instrumento (se informado pelo usuário)
+    _comp_div = fre.get('composicao_divida', [])
+    if _comp_div and len(_comp_div) > 0:
+        story.append(P('4.1.1 Composição por Instrumento', s['ssh']))
+        cd_hdr = [P('Instrumento', s['th']), P('% Dívida', s['th']),
+                  P('Taxa Emissão', s['th']), P('Vencimento', s['th']), P('Ticker/Código', s['th'])]
+        cd_rows = []
+        for inst in _comp_div:
+            if inst.get('tipo') and inst.get('pct'):
+                cd_rows.append([
+                    P(inst.get('tipo','—'), s['tl']),
+                    P(f"{inst.get('pct','—')}%", s['tc']),
+                    P(inst.get('taxa','—'), s['tc']),
+                    P(inst.get('venc','—'), s['tc']),
+                    P(inst.get('ticker','—'), s['tc']),
+                ])
+        if cd_rows:
+            cd_data = [cd_hdr] + cd_rows
+            story.append(tbl(cd_data, [W*0.22, W*0.12, W*0.22, W*0.18, W*0.26]))
+            story.append(SP(4))
 
     story.append(P('4.2 Indicadores de Crédito', s['ssh']))
     ic_hdr = [P('Métrica', s['th']), P('2025A', s['th']), P('Target Int.', s['th']),
@@ -606,10 +670,14 @@ def gerar_pdf(dfp, fre, macro):
     # ────────────────────────────────────────────────────────────────────
     story.append(PageBreak())
     story += [P('5. ANÁLISE DE SENSIBILIDADE — PREMISSAS DO USUÁRIO', s['sh']), HR()]
-    story.append(P(
-        f'Com base nas premissas inseridas (Selic {selic:.2f}%, USD/BRL R$ {usd_brl:.2f}, '
-        f'minério Fe US$ {minerio:.0f}/t, Treasury 10Y {t10y:.2f}%), calculamos os impactos '
-        f'marginais sobre EBITDA, resultado financeiro e alavancagem:', s['body']))
+    _setor = macro.get('setor','')
+    _sens_desc = f'Com base nas premissas inseridas (Selic {selic:.2f}%, USD/BRL R$ {usd_brl:.2f}'
+    if _setor in ['mineracao','siderurgia']:
+        _sens_desc += f', minério Fe US$ {minerio:.0f}/t'
+    if _setor == 'petroleo':
+        _sens_desc += f', Brent ~US$ 78/bbl'
+    _sens_desc += f', Treasury 10Y {t10y:.2f}%), calculamos os impactos marginais sobre EBITDA e alavancagem:'
+    story.append(P(_sens_desc, s['body']))
     story.append(SP(3))
 
     imp_selic_100   = divida_cdi * 0.01
@@ -717,11 +785,11 @@ def gerar_pdf(dfp, fre, macro):
     yield_alvo = t10y + spread_min/100
 
     rec_inner = Table([
-        [P('<b>RECOMENDAÇÃO: MANTER — Com Monitoramento Ativo</b>',
+        [P(f"<b>RECOMENDAÇÃO: {macro.get('recomendacao','MANTER')} — Com Monitoramento Ativo</b>",
            ParagraphStyle('rh', fontName='Helvetica-Bold', fontSize=11,
                           textColor=colors.white, leading=16))],
         [P(
-            f'Mantemos a recomendação de <b>MANTER</b> exposição seletiva a bonds curtos e médios de {macro.get("empresa_nome","Empresa")} '
+            f"Mantemos a recomendação de <b>{macro.get('recomendacao','MANTER')}</b> exposição seletiva a bonds curtos e médios de {macro.get('empresa_nome','Empresa')} "
             f'(vencimentos 2026-2028), com spread alvo de {spread_min}-{spread_max} bps sobre Treasuries '
             f'(yield alvo ~{yield_alvo:.2f}% USD, com Treasury 10Y em {t10y:.2f}%). '
             f'EBITDA recorde de R$ {eb/1000:.1f}bi demonstra qualidade operacional. '
@@ -765,7 +833,7 @@ def gerar_pdf(dfp, fre, macro):
 
     story.append(HRFlowable(width='100%', thickness=0.5, color=GRAY_LIGHT, spaceAfter=3))
     story.append(P(
-        'DISCLAIMER: Este relatório foi gerado automaticamente com base nos documentos DFP/FRE enviados pelo usuário e '
+        f"DISCLAIMER: Este relatório sobre {macro.get('empresa_nome','a empresa')} foi gerado com base nos documentos e "
         'nas premissas macroeconômicas inseridas manualmente no dashboard. As projeções, análises e estimativas aqui '
         'contidas são de caráter puramente informativo e não constituem oferta, solicitação ou recomendação formal de '
         'compra ou venda de quaisquer valores mobiliários. Rentabilidade passada não é garantia de performance futura.',
@@ -778,6 +846,81 @@ def gerar_pdf(dfp, fre, macro):
     return buf.getvalue()
 
 # ─── ROTAS ─────────────────────────────────────────────────────────────────────
+
+@app.route('/api/cnpj/<cnpj>')
+def consultar_cnpj(cnpj):
+    """Consulta dados da empresa pelo CNPJ via BrasilAPI."""
+    raw = ''.join(filter(str.isdigit, cnpj))
+    if len(raw) != 14:
+        return jsonify({'error': 'CNPJ inválido'}), 400
+    # Mapeamento CNPJ → Ticker B3 (principais empresas)
+    CNPJ_TICKER = {
+        '33592510000154': 'PETR4', '60872504000123': 'VALE3',
+        '60746948000112': 'ITUB4', '00000000000191': 'BBAS3',
+        '90400888000142': 'BBDC4', '92702067000196': 'GGBR4',
+        '33042730000104': 'CSNA3', '15527906000159': 'HAPV3',
+        '07206816000115': 'WEGE3', '07526557000100': 'RENT3',
+    }
+    try:
+        import requests as req2
+        r = req2.get(f'https://brasilapi.com.br/api/cnpj/v1/{raw}',
+                     headers={'User-Agent': 'Mozilla/5.0'}, timeout=12)
+        if r.status_code != 200:
+            # fallback receitaws
+            r2 = req2.get(f'https://receitaws.com.br/v1/cnpj/{raw}',
+                          headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
+            d = r2.json()
+            return jsonify({
+                'razao_social': d.get('nome',''),
+                'nome_fantasia': d.get('fantasia',''),
+                'cnae': d.get('atividade_principal',[{}])[0].get('text','') if d.get('atividade_principal') else '',
+                'situacao': d.get('situacao',''),
+                'municipio': d.get('municipio',''),
+                'uf': d.get('uf',''),
+                'ticker': CNPJ_TICKER.get(raw, ''),
+                'qsa': [{'nome': s.get('nome',''), 'qualificacao': s.get('qual','')} for s in d.get('qsa', [])[:8]],
+                'setor_macro': d.get('atividade_principal',[{}])[0].get('text',''),
+            })
+        d = r.json()
+        # Detectar setor pelo CNAE
+        cnae_desc = ''
+        if d.get('cnae_fiscal_descricao'):
+            cnae_desc = d['cnae_fiscal_descricao']
+        elif d.get('cnaes_secundarios'):
+            cnae_desc = d['cnaes_secundarios'][0].get('descricao','')
+        return jsonify({
+            'razao_social': d.get('razao_social',''),
+            'nome_fantasia': d.get('nome_fantasia',''),
+            'cnae': cnae_desc,
+            'situacao': d.get('descricao_situacao_cadastral',''),
+            'municipio': d.get('municipio',''),
+            'uf': d.get('uf',''),
+            'capital_social': d.get('capital_social'),
+            'ticker': CNPJ_TICKER.get(raw, ''),
+            'qsa': [{'nome': s.get('nome_socio',''), 'qualificacao': s.get('qualificacao_socio','')} for s in d.get('qsa', [])[:8]],
+            'setor_macro': cnae_desc,
+        })
+    except Exception as e:
+        return jsonify({'error': f'Não foi possível consultar: {str(e)}'}), 500
+
+@app.route('/api/treasury')
+def treasury():
+    """Retorna Treasury 10Y via FRED API."""
+    try:
+        import requests as req2
+        FRED_KEY = 'b22fa17b11e3e89d8c73dce4b08a0cd9'
+        r = req2.get('https://api.stlouisfed.org/fred/series/observations',
+                     params={'series_id':'DGS10','api_key':FRED_KEY,'file_type':'json',
+                             'sort_order':'desc','limit':5},
+                     timeout=10)
+        data = r.json()
+        obs = [o for o in data.get('observations',[]) if o.get('value') and o['value']!='.']
+        if obs:
+            return jsonify({'value': float(obs[0]['value']), 'date': obs[0]['date']})
+    except:
+        pass
+    return jsonify({'value': 4.30, 'date': 'estimado'})
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -815,9 +958,15 @@ def generate():
     dfp_data = body.get('dfp') or parse_dfp('')
     fre_data = body.get('fre') or parse_fre('')
     macro = body.get('macro', {})
-    macro['empresa_nome'] = body.get('empresa_nome', 'Empresa')
-    macro['empresa_ticker'] = body.get('empresa_ticker', 'TICK3')
-    macro['empresa_segmentos'] = body.get('empresa_segmentos', '')
+    # empresa_nome vem dentro do macro (enviado pelo frontend)
+    macro.setdefault('empresa_nome', 'Empresa')
+    macro.setdefault('empresa_ticker', 'TICK3')
+    macro.setdefault('empresa_segmentos', '')
+    macro.setdefault('empresa_database', '31/12/2025')
+    macro.setdefault('recomendacao', 'MANTER')
+    macro.setdefault('rating', 'B1/BB-')
+    macro.setdefault('rating_br', 'brBB')
+    macro.setdefault('tese_resumo', '')
     macro.setdefault('usd_brl', 5.80)
     macro.setdefault('selic', 14.75)
     macro.setdefault('ipca', 5.00)
@@ -825,6 +974,7 @@ def generate():
     macro.setdefault('minerio_fe', 102)
     macro.setdefault('hrc', 575)
     macro.setdefault('treasury_10y', 4.30)
+    macro.setdefault('spread_alvo', 425)
     try:
         pdf_bytes = gerar_pdf(dfp_data, fre_data, macro)
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',

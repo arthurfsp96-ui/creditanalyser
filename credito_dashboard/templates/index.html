@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Credit Desk — Análise de Crédito</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#060910;--bg2:#0b1120;--bg3:#0f1830;--border:#1a2540;--border2:#243352;--accent:#c8102e;--accent2:#e8272a;--gold:#f4a22d;--teal:#00d4aa;--blue:#3b82f6;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;--green:#22c55e;--red:#ef4444;--orange:#f59e0b;--mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif}
@@ -38,11 +37,17 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .fw input:focus,.fw select:focus,.fw textarea:focus{border-color:var(--accent)}
 .fw input.ok{border-color:rgba(34,197,94,.5);background:rgba(34,197,94,.04)}
 .fu{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:10px;color:var(--text3);pointer-events:none}
-.fw select{padding-right:10px}
+.fw select,.fw textarea{padding-right:10px}
 .fw textarea{padding:8px 10px;resize:vertical;line-height:1.6}
 .sdiv{font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.12em;color:var(--text3);margin:14px 0 10px;display:flex;align-items:center;gap:8px}
 .sdiv::after{content:'';flex:1;height:1px;background:var(--border)}
-.uz{border:1.5px dashed var(--border2);border-radius:3px;padding:16px;text-align:center;cursor:pointer;transition:all .2s;position:relative;background:rgba(255,255,255,.01)}
+.cnpj-row{display:flex;gap:8px;align-items:flex-end}
+.cnpj-row .fw{flex:1}
+.btn-cnpj{background:var(--teal);color:var(--bg);border:none;padding:8px 14px;font-family:var(--mono);font-size:11px;font-weight:600;border-radius:3px;cursor:pointer;white-space:nowrap;transition:all .2s;height:36px}
+.btn-cnpj:hover{opacity:.85}
+.cnpj-result{margin-top:8px;padding:8px 12px;background:rgba(0,212,170,.08);border:1px solid rgba(0,212,170,.2);border-radius:3px;font-family:var(--mono);font-size:10px;color:var(--teal);display:none;line-height:1.6}
+.cnpj-result.err{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.2);color:var(--red)}
+.uz{border:1.5px dashed var(--border2);border-radius:3px;padding:14px;text-align:center;cursor:pointer;transition:all .2s;position:relative;background:rgba(255,255,255,.01)}
 .uz:hover,.uz.drag{border-color:var(--accent);background:rgba(200,16,46,.04)}
 .uz.ld{border-color:var(--green);border-style:solid;background:rgba(34,197,94,.04)}
 .uz input{position:absolute;inset:0;opacity:0;cursor:pointer}
@@ -59,7 +64,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 @keyframes spin{to{transform:rotate(360deg)}}
 .pw{background:var(--border);border-radius:2px;height:3px;overflow:hidden;margin-top:8px}
 .pb2{height:100%;background:var(--accent);border-radius:2px;transition:width .4s ease}
-.log{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:10px;font-family:var(--mono);font-size:10px;line-height:1.8;max-height:130px;overflow-y:auto;color:var(--text3)}
+.log{background:var(--bg);border:1px solid var(--border);border-radius:3px;padding:10px;font-family:var(--mono);font-size:10px;line-height:1.8;max-height:120px;overflow-y:auto;color:var(--text3)}
 .ll{display:flex;gap:8px}
 .lt{color:var(--text3);flex-shrink:0}.lok{color:var(--green)}.lerr{color:var(--red)}.linf{color:var(--blue)}.lwrn{color:var(--orange)}.lacc{color:var(--accent)}
 .krow{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px}
@@ -71,16 +76,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 .sr input[type=range]{flex:1;-webkit-appearance:none;height:3px;background:var(--border2);border-radius:2px;outline:none;cursor:pointer}
 .sr input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:13px;height:13px;border-radius:50%;background:var(--accent);cursor:pointer}
 .sv{font-family:var(--mono);font-size:11px;color:var(--gold);min-width:52px;text-align:right}
-.rb{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:14px;display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.dt-hdr{display:grid;grid-template-columns:1.4fr 0.6fr 1fr 0.9fr 1fr 28px;gap:6px;padding:5px 0 8px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em}
+.dt-row{display:grid;grid-template-columns:1.4fr 0.6fr 1fr 0.9fr 1fr 28px;gap:6px;align-items:center;padding:6px 0;border-bottom:1px solid rgba(26,37,64,.4)}
+.dt-row:last-child{border-bottom:none}
+.dt-inp{background:var(--bg);border:1px solid var(--border2);border-radius:2px;padding:5px 8px;font-family:var(--mono);font-size:11px;color:var(--text);width:100%;outline:none}
+.dt-inp:focus{border-color:var(--accent)}
+select.dt-inp{padding-right:4px}
+.rb{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:14px;display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
 .rbl{font-family:var(--mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px}
-.rbv{font-family:var(--mono);font-size:18px;font-weight:700}
+.rbv{font-family:var(--mono);font-size:16px;font-weight:700}
 .rv-acc{color:var(--accent)}.rv-blue{color:var(--blue)}.rv-or{color:var(--orange)}.rv-tl{color:var(--teal)}
-.seg-tbl{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px}
-.seg-tbl th{padding:6px 8px;text-align:left;color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--border)}
-.seg-tbl td{padding:5px 4px;border-bottom:1px solid rgba(26,37,64,.4)}
-.seg-inp{background:var(--bg);border:1px solid var(--border2);border-radius:2px;padding:5px 8px;font-family:var(--mono);font-size:11px;color:var(--text);width:100%;outline:none}
-.seg-inp:focus{border-color:var(--accent)}
-@media(max-width:900px){.wrap{grid-template-columns:1fr}.fg,.fg3{grid-template-columns:1fr}}
+.comm-empty{padding:14px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)}
+.comm-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.spread-info{margin-top:6px;padding:8px 10px;background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.15);border-radius:3px;font-family:var(--mono);font-size:10px;color:var(--teal);line-height:1.6}
+.tese-btn{font-family:var(--mono);font-size:10px;color:var(--accent);cursor:pointer;float:right}
+.tese-btn:hover{text-decoration:underline}
+.qsa-item{font-family:var(--mono);font-size:10px;color:var(--text2);padding:3px 0;border-bottom:1px solid rgba(26,37,64,.3)}
+.qsa-item:last-child{border-bottom:none}
+@media(max-width:900px){.wrap{grid-template-columns:1fr}.fg,.fg3,.rb{grid-template-columns:1fr}.dt-hdr,.dt-row{grid-template-columns:1fr 0.6fr 1fr 28px}.dt-row>*:nth-child(4),.dt-row>*:nth-child(5){display:none}.dt-hdr>*:nth-child(4),.dt-hdr>*:nth-child(5){display:none}}
 </style>
 </head>
 <body>
@@ -92,211 +105,395 @@ body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13
 </header>
 
 <div class="wrap">
-  <!-- COLUNA ESQUERDA -->
-  <div class="col">
+<div class="col">
 
-    <!-- EMPRESA -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Identificação da Empresa</span><span class="tag tag-red">Obrigatório</span></div>
-      <div class="pb">
-        <div class="fg">
-          <div class="f"><div class="fl"><span class="d dt"></span>Nome da Empresa</div><div class="fw"><input type="text" id="f-nome" placeholder="Ex: Vale S.A." oninput="onEmp()"></div></div>
-          <div class="f"><div class="fl"><span class="d dd"></span>Ticker (B3)</div><div class="fw"><input type="text" id="f-tk" placeholder="Ex: VALE3" style="text-transform:uppercase" oninput="onEmp()"></div></div>
+  <!-- IDENTIFICAÇÃO -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Identificação da Empresa</span><span class="tag tag-red">Obrigatório</span></div>
+    <div class="pb">
+      <div class="f">
+        <div class="fl"><span class="d dt"></span>Nome da Empresa ou CNPJ</div>
+        <div class="cnpj-row">
+          <div class="fw"><input type="text" id="f-nome" placeholder="Ex: Vale S.A. ou 33.592.510/0001-54" oninput="onNome()" autocomplete="off"></div>
+          <button class="btn-cnpj" id="btn-cnpj" onclick="buscarCNPJ()" style="display:none">🔍 Buscar</button>
         </div>
-        <div class="f" style="margin-top:10px"><div class="fl"><span class="d db"></span>Segmentos / Setores</div><div class="fw"><input type="text" id="f-segs" placeholder="Ex: Mineração · Logística · Energia"></div></div>
-        <div class="fg" style="margin-top:10px">
-          <div class="f"><div class="fl"><span class="d do"></span>Data-base</div><div class="fw"><input type="text" id="f-dt" value="31/12/2025" placeholder="31/12/2025"></div></div>
-          <div class="f"><div class="fl"><span class="d dg"></span>Ano Referência</div><div class="fw"><input type="number" id="f-ano" value="2025" placeholder="2025"></div></div>
-        </div>
+        <div class="cnpj-result" id="cnpj-res"></div>
+      </div>
+      <div class="fg" style="margin-top:10px">
+        <div class="f"><div class="fl"><span class="d dd"></span>Ticker (B3)</div><div class="fw"><input type="text" id="f-tk" placeholder="Ex: VALE3" style="text-transform:uppercase" oninput="onTk()"></div></div>
+        <div class="f"><div class="fl"><span class="d db"></span>CNPJ</div><div class="fw"><input type="text" id="f-cnpj" placeholder="00.000.000/0000-00" oninput="fmtC(this)"></div></div>
+      </div>
+      <div class="f" style="margin-top:10px"><div class="fl"><span class="d db"></span>Segmentos / Setores</div><div class="fw"><input type="text" id="f-segs" placeholder="Preenchido automaticamente ou edite" oninput="detSetor()"></div></div>
+      <div class="fg" style="margin-top:10px">
+        <div class="f"><div class="fl"><span class="d do"></span>Data-base</div><div class="fw"><input type="text" id="f-dt" value="31/12/2025"></div></div>
+        <div class="f"><div class="fl"><span class="d dg"></span>Ano Referência</div><div class="fw"><input type="number" id="f-ano" value="2025"></div></div>
+      </div>
+      <div id="qsa-box" style="display:none;margin-top:12px">
+        <div class="sdiv">Quadro Societário — Receita Federal</div>
+        <div id="qsa-list"></div>
       </div>
     </div>
-
-    <!-- UPLOAD -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Upload de Documentos</span><span class="tag tag-blue">Extração automática</span></div>
-      <div class="pb" style="display:flex;flex-direction:column;gap:10px">
-        <div class="uz" id="dz" ondragover="ev.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="drop(event,'dfp')">
-          <input type="file" accept=".pdf" id="di" onchange="pick('dfp')">
-          <div style="font-size:20px;margin-bottom:5px">📄</div>
-          <div class="uz-label" id="dl">DFP — Demonstrações Financeiras</div>
-          <div class="uz-hint">Arraste ou clique · PDF · max 100MB</div>
-          <div class="uz-fn" id="df"></div>
-        </div>
-        <div class="uz" id="fz" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="drop(event,'fre')">
-          <input type="file" accept=".pdf" id="fi" onchange="pick('fre')">
-          <div style="font-size:20px;margin-bottom:5px">📋</div>
-          <div class="uz-label" id="fl2">FRE — Formulário de Referência</div>
-          <div class="uz-hint">Arraste ou clique · PDF · max 150MB</div>
-          <div class="uz-fn" id="ff"></div>
-        </div>
-        <button class="btn-s" id="bp" onclick="proc()">⚡ Extrair dados dos PDFs automaticamente</button>
-        <div class="pw"><div class="pb2" id="pg" style="width:0%"></div></div>
-        <div class="log" id="log"><div class="ll"><span class="lt">00:00</span><span class="linf">Preencha os campos ou carregue PDFs para extração automática.</span></div></div>
-      </div>
-    </div>
-
-    <!-- DRE -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Dados Financeiros — DRE</span><span class="tag tag-gold" id="dre-src">Manual</span></div>
-      <div class="pb">
-        <div class="sdiv">Resultado (R$ milhões)</div>
-        <div class="fg">
-          <div class="f"><div class="fl"><span class="d dg"></span>Receita Líquida</div><div class="fw"><input type="number" id="f-rec" placeholder="44798" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d dg"></span>EBITDA Ajustado</div><div class="fw"><input type="number" id="f-eb" placeholder="11796" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d do"></span>Resultado Financeiro</div><div class="fw"><input type="number" id="f-rf" placeholder="-6496" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d dr"></span>Lucro (Prejuízo) Líquido</div><div class="fw"><input type="number" id="f-ll" placeholder="-1507" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d db"></span>FCO</div><div class="fw"><input type="number" id="f-fco" placeholder="-973" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d db"></span>CAPEX</div><div class="fw"><input type="number" id="f-cap" placeholder="5936" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d do"></span>Juros Pagos</div><div class="fw"><input type="number" id="f-jur" placeholder="4268" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d dg"></span>Lucro Bruto</div><div class="fw"><input type="number" id="f-lb" placeholder="12394" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- BALANÇO -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Balanço Patrimonial</span><span class="tag tag-gold" id="bal-src">Manual</span></div>
-      <div class="pb">
-        <div class="fg">
-          <div class="f"><div class="fl"><span class="d dt"></span>Caixa + Equivalentes</div><div class="fw"><input type="number" id="f-cx" placeholder="16000" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d dr"></span>Dívida Líquida</div><div class="fw"><input type="number" id="f-dl" placeholder="41218" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d dr"></span>Dívida Bruta Total</div><div class="fw"><input type="number" id="f-db" placeholder="52924" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d db"></span>Patrimônio Líquido</div><div class="fw"><input type="number" id="f-pl" placeholder="15700" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d do"></span>Dívida CP (venc. 12m)</div><div class="fw"><input type="number" id="f-dcp" placeholder="10429" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-          <div class="f"><div class="fl"><span class="d do"></span>Maior Pico Vencimento</div><div class="fw"><input type="number" id="f-v26" placeholder="10523" oninput="calc()"><span class="fu">R$ mi</span></div></div>
-        </div>
-        <div class="sdiv">Composição da Dívida</div>
-        <div class="fg3">
-          <div class="f"><div class="fl"><span class="d db"></span>% Moeda Estrangeira</div><div class="fw"><input type="number" id="f-pme" placeholder="64" min="0" max="100"><span class="fu">%</span></div></div>
-          <div class="f"><div class="fl"><span class="d dd"></span>Taxa USD (% a.a.)</div><div class="fw"><input type="number" id="f-tusd" placeholder="6.42" step="0.1"><span class="fu">%</span></div></div>
-          <div class="f"><div class="fl"><span class="d do"></span>Taxa BRL (% a.a.)</div><div class="fw"><input type="number" id="f-tbrl" placeholder="17.05" step="0.1"><span class="fu">%</span></div></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- SEGMENTOS -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Resultados por Segmento</span><span class="tag tag-blue">Opcional</span></div>
-      <div class="pb">
-        <table class="seg-tbl"><thead><tr><th>Segmento</th><th style="text-align:right">Receita (R$ mi)</th><th style="text-align:right">EBITDA Aj. (R$ mi)</th><th style="width:30px"></th></tr></thead><tbody id="stb"></tbody></table>
-        <button class="btn-s" onclick="addSeg()" style="margin-top:10px">+ Adicionar segmento</button>
-      </div>
-    </div>
-
   </div>
 
-  <!-- COLUNA DIREITA -->
-  <div class="col">
-
-    <!-- INDICADORES -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Indicadores Calculados</span><span class="tag tag-green">● Tempo real</span></div>
-      <div class="pb">
-        <div class="krow">
-          <div class="km"><div class="kml">DL / EBITDA</div><div class="kmv" id="k-alav">—</div></div>
-          <div class="km"><div class="kml">Mg. EBITDA</div><div class="kmv" id="k-mg">—</div></div>
-          <div class="km"><div class="kml">ICJ</div><div class="kmv" id="k-icj">—</div></div>
-          <div class="km"><div class="kml">Caixa / Div.CP</div><div class="kmv" id="k-cob">—</div></div>
-        </div>
-        <div class="krow">
-          <div class="km"><div class="kml">Dívida Líquida</div><div class="kmv" id="k-dl">—</div></div>
-          <div class="km"><div class="kml">EBITDA Aj.</div><div class="kmv ok" id="k-eb">—</div></div>
-          <div class="km"><div class="kml">FCO</div><div class="kmv" id="k-fco">—</div></div>
-          <div class="km"><div class="kml">Mg. Bruta</div><div class="kmv" id="k-mgb">—</div></div>
-        </div>
+  <!-- UPLOAD -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Upload de Documentos</span><span class="tag tag-blue">Extração automática</span></div>
+    <div class="pb" style="display:flex;flex-direction:column;gap:10px">
+      <div class="uz" id="dz" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="drop(event,'dfp')">
+        <input type="file" accept=".pdf" id="di" onchange="pick('dfp')">
+        <div style="font-size:18px;margin-bottom:4px">📄</div>
+        <div class="uz-label" id="dl">DFP — Demonstrações Financeiras</div>
+        <div class="uz-hint">Arraste ou clique · PDF · max 100MB</div>
+        <div class="uz-fn" id="df"></div>
       </div>
-    </div>
-
-    <!-- MACRO -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Premissas Macroeconômicas</span><span class="tag tag-gold">Edição manual</span></div>
-      <div class="pb">
-        <div class="sdiv">Câmbio e Juros</div>
-        <div class="fg">
-          <div class="f"><div class="fl"><span class="d dd"></span>USD / BRL</div><div class="sr"><input type="range" id="s-usd" min="4" max="8" step="0.05" value="5.80" oninput="ss('usd')"><span class="sv" id="sv-usd">R$ 5,80</span></div><div class="fw"><input type="number" id="i-usd" value="5.80" step="0.05" oninput="si('usd')"><span class="fu">R$</span></div></div>
-          <div class="f"><div class="fl"><span class="d do"></span>Selic (% a.a.)</div><div class="sr"><input type="range" id="s-sel" min="8" max="22" step="0.25" value="14.75" oninput="ss('sel')"><span class="sv" id="sv-sel">14,75%</span></div><div class="fw"><input type="number" id="i-sel" value="14.75" step="0.25" oninput="si('sel')"><span class="fu">%</span></div></div>
-          <div class="f"><div class="fl"><span class="d db"></span>IPCA (% a.a.)</div><div class="sr"><input type="range" id="s-ipc" min="2" max="12" step="0.25" value="5.00" oninput="ss('ipc')"><span class="sv" id="sv-ipc">5,00%</span></div><div class="fw"><input type="number" id="i-ipc" value="5.00" step="0.25" oninput="si('ipc')"><span class="fu">%</span></div></div>
-          <div class="f"><div class="fl"><span class="d dt"></span>CDI (% a.a.)</div><div class="sr"><input type="range" id="s-cdi" min="7" max="22" step="0.25" value="14.65" oninput="ss('cdi')"><span class="sv" id="sv-cdi">14,65%</span></div><div class="fw"><input type="number" id="i-cdi" value="14.65" step="0.25" oninput="si('cdi')"><span class="fu">%</span></div></div>
-        </div>
-        <div class="sdiv">Commodities e Mercados</div>
-        <div class="fg">
-          <div class="f"><div class="fl"><span class="d dr"></span>Minério Fe 62% (US$/t)</div><div class="sr"><input type="range" id="s-min" min="60" max="160" step="1" value="102" oninput="ss('min')"><span class="sv" id="sv-min">US$ 102</span></div><div class="fw"><input type="number" id="i-min" value="102" step="1" oninput="si('min')"><span class="fu">US$/t</span></div></div>
-          <div class="f"><div class="fl"><span class="d dd"></span>HRC China (US$/t)</div><div class="sr"><input type="range" id="s-hrc" min="350" max="900" step="5" value="575" oninput="ss('hrc')"><span class="sv" id="sv-hrc">US$ 575</span></div><div class="fw"><input type="number" id="i-hrc" value="575" step="5" oninput="si('hrc')"><span class="fu">US$/t</span></div></div>
-          <div class="f"><div class="fl"><span class="d db"></span>Treasury 10Y (%)</div><div class="sr"><input type="range" id="s-t10" min="2" max="7" step="0.05" value="4.30" oninput="ss('t10')"><span class="sv" id="sv-t10">4,30%</span></div><div class="fw"><input type="number" id="i-t10" value="4.30" step="0.05" oninput="si('t10')"><span class="fu">%</span></div></div>
-          <div class="f"><div class="fl"><span class="d dt"></span>Spread Alvo (bps)</div><div class="sr"><input type="range" id="s-spd" min="100" max="800" step="25" value="425" oninput="ss('spd')"><span class="sv" id="sv-spd">425 bps</span></div><div class="fw"><input type="number" id="i-spd" value="425" step="25" oninput="si('spd')"><span class="fu">bps</span></div></div>
-        </div>
+      <div class="uz" id="fz" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="drop(event,'fre')">
+        <input type="file" accept=".pdf" id="fi" onchange="pick('fre')">
+        <div style="font-size:18px;margin-bottom:4px">📋</div>
+        <div class="uz-label" id="fl2">FRE — Formulário de Referência</div>
+        <div class="uz-hint">Arraste ou clique · PDF · max 150MB</div>
+        <div class="uz-fn" id="ff"></div>
       </div>
+      <button class="btn-s" id="bp" onclick="proc()">⚡ Extrair dados dos PDFs automaticamente</button>
+      <div class="pw"><div class="pb2" id="pg" style="width:0%"></div></div>
+      <div class="log" id="log"><div class="ll"><span class="lt">00:00</span><span class="linf">Carregue PDFs para extração automática ou preencha manualmente.</span></div></div>
     </div>
-
-    <!-- RECOMENDAÇÃO -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Recomendação e Tese</span></div>
-      <div class="pb">
-        <div class="fg">
-          <div class="f"><div class="fl"><span class="d dr"></span>Recomendação</div><div class="fw"><select id="f-reco" onchange="calc()"><option value="MANTER">MANTER</option><option value="COMPRA">COMPRA</option><option value="VENDA">VENDA</option><option value="NEUTRO">NEUTRO</option></select></div></div>
-          <div class="f"><div class="fl"><span class="d db"></span>Rating Implícito</div><div class="fw"><input type="text" id="f-rat" placeholder="Ex: B1 / BB-" value="B1 / BB-" oninput="calc()"></div></div>
-        </div>
-        <div class="f" style="margin-top:10px"><div class="fl"><span class="d dd"></span>Tese resumida (aparece na capa do PDF)</div><div class="fw"><textarea id="f-tese" rows="3" placeholder="Ex: Empresa encerra o período com EBITDA recorde. Alavancagem elevada mas caixa confortável. Plano de desinvestimentos é o catalisador central."></textarea></div></div>
-      </div>
-    </div>
-
-    <!-- GERAR PDF -->
-    <div class="panel">
-      <div class="ph"><span class="pt">Gerar Relatório PDF</span></div>
-      <div class="pb">
-        <div class="rb">
-          <div><div class="rbl">Empresa</div><div class="rbv rv-acc" id="pv-nome" style="font-size:14px">—</div></div>
-          <div><div class="rbl">Recomendação</div><div class="rbv rv-acc" id="pv-rec">MANTER</div></div>
-          <div><div class="rbl">Alavancagem</div><div class="rbv rv-or" id="pv-alav">—</div></div>
-          <div><div class="rbl">Spread Alvo</div><div class="rbv rv-tl" id="pv-spd">425 bps</div></div>
-        </div>
-        <button class="btn-p" id="bg" onclick="gerar()">
-          <span id="gi">⬇</span><span id="gt">Gerar Análise de Crédito em PDF</span>
-        </button>
-        <div style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center">Campos vazios usam valores padrão (CSN 2025 como referência)</div>
-      </div>
-    </div>
-
   </div>
+
+  <!-- DRE -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Dados Financeiros — DRE</span><span class="tag tag-gold" id="dre-src">Manual</span></div>
+    <div class="pb">
+      <div class="sdiv">Resultado (R$ milhões)</div>
+      <div class="fg">
+        <div class="f"><div class="fl"><span class="d dg"></span>Receita Líquida</div><div class="fw"><input type="number" id="f-rec" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d dg"></span>EBITDA Ajustado</div><div class="fw"><input type="number" id="f-eb" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d do"></span>Resultado Financeiro</div><div class="fw"><input type="number" id="f-rf" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d dr"></span>Lucro (Prejuízo) Líquido</div><div class="fw"><input type="number" id="f-ll" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d db"></span>FCO</div><div class="fw"><input type="number" id="f-fco" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d db"></span>CAPEX</div><div class="fw"><input type="number" id="f-cap" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d do"></span>Juros Pagos</div><div class="fw"><input type="number" id="f-jur" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d dg"></span>Lucro Bruto</div><div class="fw"><input type="number" id="f-lb" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BALANÇO -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Balanço Patrimonial</span><span class="tag tag-gold" id="bal-src">Manual</span></div>
+    <div class="pb">
+      <div class="fg">
+        <div class="f"><div class="fl"><span class="d dt"></span>Caixa + Equivalentes</div><div class="fw"><input type="number" id="f-cx" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d dr"></span>Dívida Líquida</div><div class="fw"><input type="number" id="f-dl" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d dr"></span>Dívida Bruta Total</div><div class="fw"><input type="number" id="f-db" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d db"></span>Patrimônio Líquido</div><div class="fw"><input type="number" id="f-pl" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d do"></span>Dívida CP (venc. 12m)</div><div class="fw"><input type="number" id="f-dcp" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+        <div class="f"><div class="fl"><span class="d do"></span>Maior Pico Vencimento</div><div class="fw"><input type="number" id="f-v26" placeholder="—" oninput="calc()"><span class="fu">R$ mi</span></div></div>
+      </div>
+      <div class="sdiv">Composição da Dívida por Instrumento</div>
+      <div class="dt-hdr"><span>Tipo</span><span>%</span><span>Taxa Emissão</span><span>Vencimento</span><span>Ticker/Código</span><span></span></div>
+      <div id="div-list"></div>
+      <button class="btn-s" onclick="addDiv()" style="margin-top:8px">+ Adicionar instrumento</button>
+      <div id="div-res" style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)"></div>
+    </div>
+  </div>
+
+  <!-- SEGMENTOS -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Resultados por Segmento</span><span class="tag tag-blue">Opcional</span></div>
+    <div class="pb">
+      <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:11px">
+        <thead><tr style="border-bottom:1px solid var(--border)">
+          <th style="padding:5px 8px;text-align:left;color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.08em">Segmento</th>
+          <th style="padding:5px 8px;text-align:right;color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.08em">Receita</th>
+          <th style="padding:5px 8px;text-align:right;color:var(--text3);font-size:9px;text-transform:uppercase;letter-spacing:.08em">EBITDA Aj.</th>
+          <th style="width:28px"></th>
+        </tr></thead>
+        <tbody id="stb"></tbody>
+      </table>
+      <button class="btn-s" onclick="addSeg()" style="margin-top:10px">+ Adicionar segmento</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="col">
+
+  <!-- INDICADORES -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Indicadores Calculados</span><span class="tag tag-green">● Tempo real</span></div>
+    <div class="pb">
+      <div class="krow">
+        <div class="km"><div class="kml">DL / EBITDA</div><div class="kmv" id="k-alav">—</div></div>
+        <div class="km"><div class="kml">Mg. EBITDA</div><div class="kmv" id="k-mg">—</div></div>
+        <div class="km"><div class="kml">ICJ</div><div class="kmv" id="k-icj">—</div></div>
+        <div class="km"><div class="kml">Caixa/Div.CP</div><div class="kmv" id="k-cob">—</div></div>
+      </div>
+      <div class="krow">
+        <div class="km"><div class="kml">Dívida Líquida</div><div class="kmv" id="k-dl">—</div></div>
+        <div class="km"><div class="kml">EBITDA Aj.</div><div class="kmv ok" id="k-eb">—</div></div>
+        <div class="km"><div class="kml">FCO</div><div class="kmv" id="k-fco">—</div></div>
+        <div class="km"><div class="kml">Mg. Bruta</div><div class="kmv" id="k-mgb">—</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MACRO -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Premissas Macroeconômicas</span><span class="tag tag-gold">Edição manual</span></div>
+    <div class="pb">
+      <div class="sdiv">Câmbio e Juros</div>
+      <div class="fg">
+        <div class="f"><div class="fl"><span class="d dd"></span>USD / BRL</div><div class="sr"><input type="range" id="s-usd" min="4" max="8" step="0.05" value="5.80" oninput="ss('usd')"><span class="sv" id="sv-usd">R$ 5,80</span></div><div class="fw"><input type="number" id="i-usd" value="5.80" step="0.05" oninput="si('usd')"><span class="fu">R$</span></div></div>
+        <div class="f"><div class="fl"><span class="d do"></span>Selic (% a.a.)</div><div class="sr"><input type="range" id="s-sel" min="8" max="22" step="0.25" value="14.75" oninput="ss('sel')"><span class="sv" id="sv-sel">14,75%</span></div><div class="fw"><input type="number" id="i-sel" value="14.75" step="0.25" oninput="si('sel')"><span class="fu">%</span></div></div>
+        <div class="f"><div class="fl"><span class="d db"></span>IPCA (% a.a.)</div><div class="sr"><input type="range" id="s-ipc" min="2" max="12" step="0.25" value="5.00" oninput="ss('ipc')"><span class="sv" id="sv-ipc">5,00%</span></div><div class="fw"><input type="number" id="i-ipc" value="5.00" step="0.25" oninput="si('ipc')"><span class="fu">%</span></div></div>
+        <div class="f"><div class="fl"><span class="d dt"></span>CDI (% a.a.)</div><div class="sr"><input type="range" id="s-cdi" min="7" max="22" step="0.25" value="14.65" oninput="ss('cdi')"><span class="sv" id="sv-cdi">14,65%</span></div><div class="fw"><input type="number" id="i-cdi" value="14.65" step="0.25" oninput="si('cdi')"><span class="fu">%</span></div></div>
+      </div>
+      <div class="sdiv">Indicadores Setoriais</div>
+      <div id="comm-area"><div class="comm-empty">Preencha a empresa para ver os indicadores relevantes ao setor.</div></div>
+      <div class="sdiv">Mercados Internacionais</div>
+      <div class="fg">
+        <div class="f">
+          <div class="fl"><span class="d db"></span>Treasury 10Y EUA (%) <span id="t10-src" style="color:var(--teal);font-size:8px;margin-left:4px"></span></div>
+          <div class="sr"><input type="range" id="s-t10" min="2" max="7" step="0.05" value="4.30" oninput="ss('t10')"><span class="sv" id="sv-t10">4,30%</span></div>
+          <div class="fw"><input type="number" id="i-t10" value="4.30" step="0.05" oninput="si('t10')"><span class="fu">%</span></div>
+        </div>
+        <div class="f">
+          <div class="fl"><span class="d dt"></span>Spread Alvo <span id="spd-cur" style="color:var(--text3);font-size:8px;margin-left:4px"></span></div>
+          <div class="sr"><input type="range" id="s-spd" min="50" max="800" step="25" value="425" oninput="ss('spd')"><span class="sv" id="sv-spd">425 bps</span></div>
+          <div class="fw"><input type="number" id="i-spd" value="425" step="25" oninput="si('spd')"><span class="fu">bps</span></div>
+          <div class="spread-info" id="spd-info" style="display:none"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RECOMENDAÇÃO -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Recomendação e Tese</span></div>
+    <div class="pb">
+      <div class="fg3">
+        <div class="f"><div class="fl"><span class="d dr"></span>Recomendação</div><div class="fw"><select id="f-reco" onchange="calc()"><option>MANTER</option><option>COMPRA</option><option>VENDA</option><option>NEUTRO</option></select></div></div>
+        <div class="f">
+          <div class="fl"><span class="d db"></span>Rating Doméstico BR</div>
+          <div class="fw"><input type="text" id="f-rat-br" placeholder="brBB / brA-" oninput="updPrev()"></div>
+          <div style="font-family:var(--mono);font-size:8px;color:var(--text3);margin-top:2px">Escala nacional · Fitch BR / S&P BR</div>
+        </div>
+        <div class="f">
+          <div class="fl"><span class="d dd"></span>Rating Global</div>
+          <div class="fw"><input type="text" id="f-rat-gl" placeholder="Ba1 / BB+" oninput="updPrev()"></div>
+          <div style="font-family:var(--mono);font-size:8px;color:var(--text3);margin-top:2px">Escala global · Moody's / S&P</div>
+        </div>
+      </div>
+      <div class="f" style="margin-top:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+          <div class="fl"><span class="d dd"></span>Tese resumida (capa do PDF)</div>
+          <span class="tese-btn" onclick="autoTese()">⚡ Gerar automaticamente</span>
+        </div>
+        <div class="fw"><textarea id="f-tese" rows="4" placeholder="Descreva a tese de crédito..."></textarea></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GERAR PDF -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Gerar Relatório PDF</span></div>
+    <div class="pb">
+      <div class="rb">
+        <div><div class="rbl">Empresa</div><div class="rbv rv-acc" id="pv-nome" style="font-size:13px">—</div></div>
+        <div><div class="rbl">Recomendação</div><div class="rbv rv-acc" id="pv-rec">—</div></div>
+        <div><div class="rbl">Rating BR / Global</div><div class="rbv rv-blue" id="pv-rat" style="font-size:12px">—</div></div>
+        <div><div class="rbl">Alavancagem</div><div class="rbv rv-or" id="pv-alav">—</div></div>
+      </div>
+      <button class="btn-p" id="bg" onclick="gerar()"><span id="gi">⬇</span><span id="gt">Gerar Análise de Crédito em PDF</span></button>
+      <div style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center">Campos vazios usam valores padrão como referência</div>
+    </div>
+  </div>
+
+</div>
 </div>
 
 <script>
-// Clock
 setInterval(()=>document.getElementById('clock').textContent=new Date().toLocaleTimeString('pt-BR'),1000);
-
-// Log
 function lg(m,t='inf'){const el=document.getElementById('log');const n=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});el.innerHTML+=`<div class="ll"><span class="lt">${n}</span><span class="l${t}">${m}</span></div>`;el.scrollTop=el.scrollHeight;}
 
-// Header empresa
-function onEmp(){const tk=(document.getElementById('f-tk').value||'—').toUpperCase();const nm=document.getElementById('f-nome').value||'';document.getElementById('hdr-tk').textContent=nm?`${tk} · ${nm}`:tk;document.getElementById('f-tk').value=tk;document.getElementById('pv-nome').textContent=nm||tk||'—';calc();}
-
-// Sliders
-const SFM={usd:v=>`R$ ${parseFloat(v).toFixed(2).replace('.',',')}`,sel:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,ipc:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,cdi:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,min:v=>`US$ ${parseInt(v)}`,hrc:v=>`US$ ${parseInt(v)}`,t10:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,spd:v=>`${parseInt(v)} bps`};
-function ss(k){const v=document.getElementById(`s-${k}`).value;document.getElementById(`i-${k}`).value=v;document.getElementById(`sv-${k}`).textContent=SFM[k](v);onMac();}
-function si(k){const v=document.getElementById(`i-${k}`).value;const s=document.getElementById(`s-${k}`);if(s)s.value=v;document.getElementById(`sv-${k}`).textContent=SFM[k](v);onMac();}
-function onMac(){document.getElementById('pv-spd').textContent=SFM.spd(document.getElementById('i-spd').value);calc();}
-
-function getMac(){return{usd_brl:parseFloat(document.getElementById('i-usd').value)||5.80,selic:parseFloat(document.getElementById('i-sel').value)||14.75,ipca:parseFloat(document.getElementById('i-ipc').value)||5.00,cdi:parseFloat(document.getElementById('i-cdi').value)||14.65,minerio_fe:parseFloat(document.getElementById('i-min').value)||102,hrc:parseFloat(document.getElementById('i-hrc').value)||575,treasury_10y:parseFloat(document.getElementById('i-t10').value)||4.30,spread_alvo:parseInt(document.getElementById('i-spd').value)||425};}
-
-// Calcular
-function gv(id,def){const v=parseFloat(document.getElementById(id).value);return isNaN(v)?def:v;}
-function fmt(v,d=2){if(v==null||isNaN(v))return'—';return v.toFixed(d).replace('.',',');}
-function calc(){
-  const eb=gv('f-eb',0),dl=gv('f-dl',0),rl=gv('f-rec',0),cx=gv('f-cx',0);
-  const jur=gv('f-jur',0),fco=gv('f-fco',0),lb=gv('f-lb',0),dcp=gv('f-dcp',0);
-  const alav=eb>0&&dl>0?dl/eb:null;
-  const mg=rl>0&&eb>0?eb/rl*100:null;
-  const icj=jur>0&&eb>0?eb/jur:null;
-  const cob=dcp>0&&cx>0?cx/dcp*100:null;
-  const mgb=rl>0&&lb>0?lb/rl*100:null;
-  function sk(id,v,u=''){const el=document.getElementById(id);if(!el)return;el.textContent=v==null?'—':`${fmt(v)}${u}`;el.className='kmv';if(id==='k-alav')el.className+=' '+(v==null?'':(v>4?'bad':v>3?'warn':'ok'));if(id==='k-mg'||id==='k-mgb')el.className+=' '+(v==null?'':(v>20?'ok':v>15?'warn':'bad'));if(id==='k-icj')el.className+=' '+(v==null?'':(v>2.5?'ok':v>1.5?'warn':'bad'));if(id==='k-cob')el.className+=' '+(v==null?'':(v>150?'ok':v>100?'warn':'bad'));if(id==='k-fco')el.className+=' '+(fco>0?'ok':'bad');}
-  sk('k-alav',alav,'x');sk('k-mg',mg,'%');sk('k-icj',icj,'x');sk('k-cob',cob,'%');
-  sk('k-dl',dl>0?dl/1000:null,' bi');sk('k-eb',eb>0?eb/1000:null,' bi');sk('k-fco',fco!=0?fco/1000:null,' bi');sk('k-mgb',mgb,'%');
-  document.getElementById('pv-alav').textContent=alav?fmt(alav)+'x':'—';
-  document.getElementById('pv-rec').textContent=document.getElementById('f-reco').value||'MANTER';
+// CNPJ
+function fmtC(el){let v=el.value.replace(/\D/g,'').substring(0,14);v=v.replace(/(\d{2})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1/$2').replace(/(\d{4})(\d)/,'$1-$2');el.value=v;}
+function onNome(){
+  const v=document.getElementById('f-nome').value;
+  const raw=v.replace(/\D/g,'');
+  const btn=document.getElementById('btn-cnpj');
+  if(raw.length>=14){btn.style.display='flex';document.getElementById('f-cnpj').value=raw.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');}
+  else{btn.style.display='none';updHdr();}
+}
+function onTk(){document.getElementById('f-tk').value=document.getElementById('f-tk').value.toUpperCase();updHdr();detSetor();}
+function updHdr(){
+  const nm=document.getElementById('f-nome').value||'—';
+  const tk=document.getElementById('f-tk').value||'—';
+  document.getElementById('hdr-tk').textContent=nm!=='—'?`${tk} · ${nm}`:tk;
+  document.getElementById('pv-nome').textContent=nm!=='—'?nm:tk;
+}
+async function buscarCNPJ(){
+  const raw=document.getElementById('f-nome').value.replace(/\D/g,'');
+  if(raw.length!==14){return;}
+  const btn=document.getElementById('btn-cnpj');
+  btn.textContent='⏳';btn.disabled=true;
+  lg(`Consultando CNPJ ${raw}...`,'acc');
+  const res=document.getElementById('cnpj-res');
+  res.className='cnpj-result';
+  try{
+    const r=await fetch(`/api/cnpj/${raw}`);
+    const d=await r.json();
+    if(d.error)throw new Error(d.error);
+    document.getElementById('f-nome').value=d.nome_fantasia||d.razao_social||'';
+    document.getElementById('f-cnpj').value=raw.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
+    if(d.cnae)document.getElementById('f-segs').value=d.cnae;
+    if(d.ticker)document.getElementById('f-tk').value=d.ticker;
+    res.style.display='block';
+    res.innerHTML=`✓ <b>${d.razao_social}</b>${d.nome_fantasia&&d.nome_fantasia!==d.razao_social?` · "${d.nome_fantasia}"`:''}${d.cnae?`<br>CNAE: ${d.cnae}`:''} · ${d.situacao||''}${d.municipio?` · ${d.municipio}/${d.uf}`:''}`;
+    if(d.qsa&&d.qsa.length){
+      document.getElementById('qsa-box').style.display='block';
+      document.getElementById('qsa-list').innerHTML=d.qsa.map(s=>`<div class="qsa-item">👤 <b>${s.nome}</b> — ${s.qualificacao}</div>`).join('');
+    }
+    updHdr();detSetor();
+    lg(`✓ ${d.razao_social} encontrada`,'ok');
+  }catch(e){
+    res.style.display='block';res.className='cnpj-result err';
+    res.textContent=`Erro: ${e.message}`;
+    lg(`Erro CNPJ: ${e.message}`,'err');
+  }finally{btn.textContent='🔍 Buscar';btn.disabled=false;}
 }
 
-// Segmentos
+// SETORES
+const SETS={
+  mineracao:{n:'Mineração',inds:[{k:'min',l:'Minério Fe 62% (US$/t)',min:60,max:160,st:1,v:102,u:'US$/t'},{k:'cop',l:'Cobre LME (US$/t)',min:6000,max:12000,st:100,v:9000,u:'US$/t'},{k:'frete',l:'Frete BCI C3 (US$/t)',min:5,max:30,st:.5,v:12,u:'US$/t'}]},
+  siderurgia:{n:'Siderurgia',inds:[{k:'hrc',l:'HRC China (US$/t)',min:350,max:900,st:5,v:575,u:'US$/t'},{k:'min2',l:'Minério Fe 62% (US$/t)',min:60,max:160,st:1,v:102,u:'US$/t'},{k:'cok',l:'Carvão Coque (US$/t)',min:100,max:400,st:5,v:220,u:'US$/t'}]},
+  petroleo:{n:'Petróleo & Gás',inds:[{k:'brt',l:'Brent (US$/bbl)',min:40,max:120,st:1,v:78,u:'US$/bbl'},{k:'wti',l:'WTI (US$/bbl)',min:40,max:120,st:1,v:75,u:'US$/bbl'},{k:'gas',l:'Gás Natural (US$/MMBtu)',min:1,max:10,st:.1,v:2.8,u:'US$/MMBtu'}]},
+  varejo:{n:'Varejo',inds:[{k:'sss',l:'SSS (% a/a)',min:-10,max:20,st:.5,v:5,u:'%'},{k:'inad',l:'Inadimplência (%)',min:2,max:12,st:.1,v:5.5,u:'%'},{k:'igpm',l:'IGP-M 12m (%)',min:-5,max:15,st:.25,v:6,u:'%'}]},
+  saude:{n:'Saúde',inds:[{k:'sin',l:'Sinistralidade (%)',min:60,max:95,st:.5,v:80,u:'%'},{k:'infmed',l:'Inflação Médica (%)',min:5,max:20,st:.25,v:12,u:'%'},{k:'iess',l:'IESS (%)',min:5,max:18,st:.25,v:10,u:'%'}]},
+  agro:{n:'Agronegócio',inds:[{k:'soja',l:'Soja CBOT (¢/bu)',min:800,max:1600,st:10,v:1050,u:'¢/bu'},{k:'milho',l:'Milho CBOT (¢/bu)',min:300,max:700,st:5,v:440,u:'¢/bu'},{k:'acucar',l:'Açúcar NY11 (¢/lb)',min:10,max:30,st:.1,v:18,u:'¢/lb'}]},
+  bancos:{n:'Bancos',inds:[{k:'nim',l:'NIM (%)',min:2,max:15,st:.1,v:8,u:'%'},{k:'inad2',l:'Inadimplência >90d (%)',min:1,max:8,st:.1,v:3.5,u:'%'},{k:'bas',l:'Basileia Tier1 (%)',min:10,max:20,st:.1,v:14,u:'%'}]},
+  telecom:{n:'Telecom',inds:[{k:'arpu',l:'ARPU Pós (R$/mês)',min:30,max:100,st:1,v:55,u:'R$/mês'},{k:'churn',l:'Churn mensal (%)',min:.5,max:4,st:.1,v:1.8,u:'%'},{k:'igpm2',l:'IGP-M 12m (%)',min:-5,max:15,st:.25,v:6,u:'%'}]},
+  energia:{n:'Energia Elétrica',inds:[{k:'pld',l:'PLD Médio (R$/MWh)',min:50,max:600,st:5,v:180,u:'R$/MWh'},{k:'ipca2',l:'IPCA 12m (%)',min:2,max:12,st:.25,v:5,u:'%'},{k:'igpm3',l:'IGP-M 12m (%)',min:-5,max:15,st:.25,v:6,u:'%'}]},
+};
+let _setor=null;
+function detSetor(){
+  const txt=[document.getElementById('f-segs').value,document.getElementById('f-nome').value,document.getElementById('f-tk').value].join(' ').toLowerCase();
+  const tk=document.getElementById('f-tk').value.toUpperCase();
+  let s=null;
+  if(/miner|ferro/.test(txt)||['VALE3','CMIN3'].includes(tk))s='mineracao';
+  else if(/sider|aço|lamin/.test(txt)||['CSNA3','GGBR4','USIM5'].includes(tk))s='siderurgia';
+  else if(/petro|óleo|gás/.test(txt)||['PETR4','PETR3','PRIO3','RECV3'].includes(tk))s='petroleo';
+  else if(/varejo|comércio|retail|superm/.test(txt)||['MGLU3','LREN3','AMER3'].includes(tk))s='varejo';
+  else if(/saúde|saude|hospital|plano|hapvida/.test(txt)||['HAPV3','RDRD3','FLRY3'].includes(tk))s='saude';
+  else if(/agro|soja|milho|açúcar|carne/.test(txt)||['SLCE3','SMTO3','JALL3'].includes(tk))s='agro';
+  else if(/banco|financ|crédito|seguro/.test(txt)||['ITUB4','BBDC4','BBAS3'].includes(tk))s='bancos';
+  else if(/telecom|celular|vivo|claro|tim/.test(txt)||['VIVT3','TIMS3'].includes(tk))s='telecom';
+  else if(/energia|elétric|transmiss/.test(txt)||['EGIE3','CPFE3','CMIG4'].includes(tk))s='energia';
+  _setor=s;
+  const area=document.getElementById('comm-area');
+  if(!s){area.innerHTML='<div class="comm-empty">Preencha a empresa para ver os indicadores relevantes ao setor.</div>';return;}
+  const cfg=SETS[s];
+  area.innerHTML=`<div style="font-family:var(--mono);font-size:9px;color:var(--teal);margin-bottom:8px;text-transform:uppercase;letter-spacing:.08em">Setor: ${cfg.n}</div><div class="comm-grid">${cfg.inds.map(i=>`<div class="f"><div class="fl"><span class="d dr"></span>${i.l}</div><div class="sr"><input type="range" id="sr-${i.k}" min="${i.min}" max="${i.max}" step="${i.st}" value="${i.v}" oninput="sdyn('${i.k}','${i.u}')"><span class="sv" id="sv-${i.k}">${i.v} ${i.u}</span></div><div class="fw"><input type="number" id="si-${i.k}" value="${i.v}" step="${i.st}" oninput="idyn('${i.k}','${i.u}')"><span class="fu">${i.u}</span></div></div>`).join('')}</div>`;
+  calcSpread();
+}
+function sdyn(k,u){const v=document.getElementById(`sr-${k}`).value;document.getElementById(`si-${k}`).value=v;document.getElementById(`sv-${k}`).textContent=`${v} ${u}`;}
+function idyn(k,u){const v=document.getElementById(`si-${k}`).value;const s=document.getElementById(`sr-${k}`);if(s)s.value=v;document.getElementById(`sv-${k}`).textContent=`${v} ${u}`;}
+
+// SLIDERS MACRO
+const SFM={usd:v=>`R$ ${parseFloat(v).toFixed(2).replace('.',',')}`,sel:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,ipc:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,cdi:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,t10:v=>`${parseFloat(v).toFixed(2).replace('.',',')}%`,spd:v=>`${parseInt(v)} bps`};
+function ss(k){const v=document.getElementById(`s-${k}`).value;document.getElementById(`i-${k}`).value=v;document.getElementById(`sv-${k}`).textContent=SFM[k](v);if(k==='spd'||k==='sel')calcSpread();}
+function si(k){const v=document.getElementById(`i-${k}`).value;const s=document.getElementById(`s-${k}`);if(s)s.value=v;document.getElementById(`sv-${k}`).textContent=SFM[k](v);if(k==='spd'||k==='sel')calcSpread();}
+
+// TREASURY AUTO
+async function fetchT10(){
+  try{
+    const r=await fetch('/api/treasury');
+    const d=await r.json();
+    if(d.value){
+      const v=parseFloat(d.value).toFixed(2);
+      document.getElementById('i-t10').value=v;
+      document.getElementById('s-t10').value=v;
+      document.getElementById('sv-t10').textContent=v.replace('.',',')+'%';
+      document.getElementById('t10-src').textContent='● ao vivo';
+    }
+  }catch(e){}
+}
+
+// SPREAD AUTO
+function calcSpread(){
+  const alav=parseFloat(document.getElementById('k-alav').textContent)||0;
+  if(alav<=0)return;
+  const selic=parseFloat(document.getElementById('i-sel').value)||14.75;
+  const t10=parseFloat(document.getElementById('i-t10').value)||4.30;
+  // Detectar moeda dominante
+  const temUSD=dividas.some(d=>['Bonds / Notes'].includes(d.tipo)&&(parseFloat(d.pct)||0)>5);
+  let spd=0,just='',base='',yld='';
+  if(alav<=1.5){spd=temUSD?150:120;}
+  else if(alav<=2.5){spd=temUSD?250:200;}
+  else if(alav<=3.5){spd=temUSD?400:300;}
+  else if(alav<=5){spd=temUSD?550:450;}
+  else{spd=temUSD?700:600;}
+  if(alav<=1.5)just='Alavancagem baixa (≤1,5x) — perfil investment grade alto.';
+  else if(alav<=2.5)just='Alavancagem confortável (≤2,5x) — investment grade.';
+  else if(alav<=3.5)just='Alavancagem elevada (2,5-3,5x) — sub-investment grade / high yield.';
+  else if(alav<=5)just='Alavancagem muito elevada (>3,5x) — risco de refinanciamento.';
+  else just='Alavancagem crítica (>5x) — risco de crédito elevado.';
+  const moeda=temUSD?'USD':'BRL';
+  base=temUSD?`Treasury 10Y (${t10.toFixed(2)}%)`:`CDI (${selic.toFixed(2)}%)`;
+  yld=temUSD?(t10+spd/100).toFixed(2)+'%':`CDI + ${spd} bps`;
+  document.getElementById('i-spd').value=spd;
+  document.getElementById('s-spd').value=spd;
+  document.getElementById('sv-spd').textContent=`${spd} bps`;
+  document.getElementById('spd-cur').textContent=`· ${moeda}`;
+  const info=document.getElementById('spd-info');
+  info.style.display='block';
+  info.innerHTML=`Dívida em <b>${moeda}</b> · Base: ${base} · Yield alvo: <b>${yld}</b><br>${just}`;
+  autoRating(alav);
+}
+function autoRating(a){
+  const pairs=[[1,'brAAA','Aaa/AAA'],[1.5,'brAA+','Aa2/AA'],[2,'brA+','A1/A+'],[2.5,'brA-','Baa1/BBB+'],[3,'brBBB','Baa3/BBB-'],[3.5,'brBB+','Ba1/BB+'],[4,'brBB-','Ba3/BB-'],[5,'brB+','B1/B+'],[99,'brCCC','Caa1/CCC']];
+  const [,br,gl]=pairs.find(([lim])=>a<=lim)||pairs[pairs.length-1];
+  const elBR=document.getElementById('f-rat-br');
+  const elGL=document.getElementById('f-rat-gl');
+  if(!elBR.value)elBR.value=br;
+  if(!elGL.value)elGL.value=gl;
+  updPrev();
+}
+function updPrev(){
+  document.getElementById('pv-rec').textContent=document.getElementById('f-reco').value||'—';
+  document.getElementById('pv-rat').textContent=(document.getElementById('f-rat-br').value||'—')+' / '+(document.getElementById('f-rat-gl').value||'—');
+}
+
+// COMPOSIÇÃO DÍVIDA
+let dividas=[];
+const TIPOS=['Debêntures','CRA','CRI','Bonds / Notes','FIDC','CCB / NCE','CDB / LF','Linhas Bancárias','Outros'];
+function addDiv(){dividas.push({id:Date.now(),tipo:'Debêntures',pct:'',taxa:'',venc:'',ticker:''});renderDiv();}
+function rmDiv(id){dividas=dividas.filter(d=>d.id!==id);renderDiv();}
+function upDiv(id,f,v){const d=dividas.find(x=>x.id===id);if(d){d[f]=v;calcDivRes();}}
+function renderDiv(){
+  const c=document.getElementById('div-list');
+  if(!dividas.length){c.innerHTML='<div style="padding:10px 0;font-family:var(--mono);font-size:10px;color:var(--text3)">Nenhum instrumento. Clique em "+ Adicionar instrumento".</div>';calcDivRes();return;}
+  c.innerHTML=dividas.map(d=>`<div class="dt-row">
+    <select class="dt-inp" onchange="upDiv(${d.id},'tipo',this.value)">${TIPOS.map(t=>`<option ${t===d.tipo?'selected':''}>${t}</option>`).join('')}</select>
+    <div style="position:relative"><input class="dt-inp" type="number" value="${d.pct}" placeholder="0" min="0" max="100" style="padding-right:18px" onchange="upDiv(${d.id},'pct',this.value)"><span style="position:absolute;right:5px;top:50%;transform:translateY(-50%);font-size:9px;color:var(--text3)">%</span></div>
+    <input class="dt-inp" type="text" value="${d.taxa}" placeholder="CDI+1,5%" onchange="upDiv(${d.id},'taxa',this.value)">
+    <input class="dt-inp" type="text" value="${d.venc}" placeholder="MM/AAAA" onchange="upDiv(${d.id},'venc',this.value)">
+    <input class="dt-inp" type="text" value="${d.ticker}" placeholder="VALE13 / SID28" onchange="upDiv(${d.id},'ticker',this.value)">
+    <button onclick="rmDiv(${d.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:0">×</button>
+  </div>`).join('');
+  calcDivRes();
+}
+function calcDivRes(){
+  const tot=dividas.reduce((s,d)=>s+(parseFloat(d.pct)||0),0);
+  const el=document.getElementById('div-res');
+  if(!dividas.length){el.textContent='';return;}
+  const c=Math.abs(tot-100)<1?'var(--green)':tot>100?'var(--red)':'var(--orange)';
+  el.innerHTML=`<span style="color:${c}">Total: ${tot.toFixed(1)}%</span>${Math.abs(tot-100)>1?` <span style="color:var(--text3)">(restam ${(100-tot).toFixed(1)}%)</span>`:''}`;
+  calcSpread();
+}
+renderDiv();
+
+// SEGMENTOS
 let segs=[];
 function addSeg(){segs.push({id:Date.now(),n:'',r:'',e:''});rSeg();}
 function rmSeg(id){segs=segs.filter(s=>s.id!==id);rSeg();}
@@ -304,15 +501,16 @@ function upSeg(id,f,v){const s=segs.find(x=>x.id===id);if(s)s[f]=v;}
 function rSeg(){
   const tb=document.getElementById('stb');
   if(!segs.length){tb.innerHTML=`<tr><td colspan="4" style="padding:12px;text-align:center;color:var(--text3);font-family:var(--mono);font-size:10px">Clique em "+ Adicionar segmento"</td></tr>`;return;}
-  tb.innerHTML=segs.map(s=>`<tr><td><input class="seg-inp" type="text" value="${s.n}" placeholder="Nome" onchange="upSeg(${s.id},'n',this.value)"></td><td><input class="seg-inp" type="number" value="${s.r}" placeholder="0" style="text-align:right" onchange="upSeg(${s.id},'r',this.value)"></td><td><input class="seg-inp" type="number" value="${s.e}" placeholder="0" style="text-align:right" onchange="upSeg(${s.id},'e',this.value)"></td><td style="text-align:center"><button onclick="rmSeg(${s.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">×</button></td></tr>`).join('');
+  const si='background:var(--bg);border:1px solid var(--border2);border-radius:2px;padding:5px 8px;font-family:var(--mono);font-size:11px;color:var(--text);width:100%;outline:none';
+  tb.innerHTML=segs.map(s=>`<tr style="border-bottom:1px solid rgba(26,37,64,.4)"><td style="padding:5px 4px"><input style="${si}" type="text" value="${s.n}" placeholder="Nome" onchange="upSeg(${s.id},'n',this.value)"></td><td style="padding:5px 4px"><input style="${si};text-align:right" type="number" value="${s.r}" placeholder="0" onchange="upSeg(${s.id},'r',this.value)"></td><td style="padding:5px 4px"><input style="${si};text-align:right" type="number" value="${s.e}" placeholder="0" onchange="upSeg(${s.id},'e',this.value)"></td><td style="text-align:center"><button onclick="rmSeg(${s.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px">×</button></td></tr>`).join('');
 }
 rSeg();
 
-// Upload
+// UPLOAD
 const ST={dfpFile:null,freFile:null};
 function drop(e,t){e.preventDefault();document.getElementById(t==='dfp'?'dz':'fz').classList.remove('drag');const f=e.dataTransfer.files[0];if(f?.type==='application/pdf')setF(t,f);}
 function pick(t){const f=document.getElementById(t==='dfp'?'di':'fi').files[0];if(f)setF(t,f);}
-function setF(t,f){ST[`${t}File`]=f;const z=document.getElementById(t==='dfp'?'dz':'fz');z.classList.add('ld');document.getElementById(t==='dfp'?'dl':'fl2').textContent=`✓ ${f.name.substring(0,35)}`;document.getElementById(t==='dfp'?'df':'ff').textContent=`${(f.size/1024/1024).toFixed(1)} MB`;lg(`${t.toUpperCase()} carregado: ${f.name}`,'ok');}
+function setF(t,f){ST[`${t}File`]=f;document.getElementById(t==='dfp'?'dz':'fz').classList.add('ld');document.getElementById(t==='dfp'?'dl':'fl2').textContent=`✓ ${f.name.substring(0,35)}`;document.getElementById(t==='dfp'?'df':'ff').textContent=`${(f.size/1024/1024).toFixed(1)} MB`;lg(`${t.toUpperCase()} carregado: ${f.name}`,'ok');}
 
 async function proc(){
   if(!ST.dfpFile&&!ST.freFile){lg('Nenhum arquivo selecionado','wrn');return;}
@@ -328,25 +526,24 @@ async function proc(){
     document.getElementById('pg').style.width='100%';
     if(d.dfp&&Object.keys(d.dfp).length>1){
       fill(d.dfp);
-      lg('Campos preenchidos automaticamente — revise antes de gerar','ok');
       document.getElementById('dre-src').textContent='PDF';
       document.getElementById('bal-src').textContent='PDF';
+      lg('Campos preenchidos via PDF','ok');
     }
-    if(d.fre&&Object.keys(d.fre).length>1) lg('FRE carregado — vencimentos OK','ok');
-    if(d.errors?.length) d.errors.forEach(e=>lg(e,'err'));
-    lg('Verifique os campos e ajuste o que precisar','wrn');
+    if(d.fre&&Object.keys(d.fre).length>1)lg('FRE carregado','ok');
+    if(d.errors?.length)d.errors.forEach(e=>lg(e,'err'));
+    lg('Revise antes de gerar','wrn');
   }catch(e){lg(`Erro: ${e.message}`,'err');}
   finally{btn.disabled=false;btn.textContent='⚡ Extrair dados dos PDFs automaticamente';}
 }
 
-function sv2(id,v){if(v==null||isNaN(v))return;const el=document.getElementById(id);if(!el)return;el.value=v;el.classList.add('ok');}
+function sv2(id,v){if(v==null||v===''||isNaN(v))return;const el=document.getElementById(id);if(!el)return;el.value=v;el.classList.add('ok');}
 function fill(d){
   sv2('f-eb',d.ebitda_ajustado);sv2('f-rec',d.receita_liquida);sv2('f-rf',d.resultado_financeiro);
   sv2('f-ll',d.lucro_liquido);sv2('f-fco',d.fco);sv2('f-cap',d.capex);sv2('f-jur',d.juros_pagos);
   sv2('f-lb',d.lucro_bruto);sv2('f-cx',d.caixa);sv2('f-dl',d.divida_liquida);
-  sv2('f-db',d.divida_bruta||d.divida_bruta_total);sv2('f-pl',d.patrimonio_liquido||15700);
-  sv2('f-dcp',d.divida_cp||d.emprestimos_cp);
-  if(d.receita_siderurgia){
+  sv2('f-db',d.divida_bruta);sv2('f-pl',d.patrimonio_liquido);sv2('f-dcp',d.divida_cp);
+  if(d.receita_siderurgia||d.receita_mineracao){
     segs=[];
     [['Siderurgia',d.receita_siderurgia,d.ebitda_siderurgia],['Mineração',d.receita_mineracao,d.ebitda_mineracao],['Cimentos',d.receita_cimentos,d.ebitda_cimentos],['Logística',d.receita_logistica,d.ebitda_logistica],['Energia',d.receita_energia,d.ebitda_energia]].forEach(([n,r,e])=>{if(r)segs.push({id:Date.now()+Math.random(),n,r:r||'',e:e||''});});
     rSeg();
@@ -354,61 +551,99 @@ function fill(d){
   calc();
 }
 
-// Gerar PDF
+// CALCULAR
+function gv(id,def){const v=parseFloat(document.getElementById(id)?.value);return isNaN(v)?def:v;}
+function fmt(v,d=2){if(v==null||isNaN(v))return'—';return v.toFixed(d).replace('.',',');}
+function calc(){
+  const eb=gv('f-eb',0),dl=gv('f-dl',0),rl=gv('f-rec',0),cx=gv('f-cx',0);
+  const jur=gv('f-jur',0),fco=gv('f-fco',0),lb=gv('f-lb',0),dcp=gv('f-dcp',0);
+  const alav=eb>0&&dl>0?dl/eb:null;
+  const mg=rl>0&&eb>0?eb/rl*100:null;
+  const icj=jur>0&&eb>0?eb/jur:null;
+  const cob=dcp>0&&cx>0?cx/dcp*100:null;
+  const mgb=rl>0&&lb>0?lb/rl*100:null;
+  function sk(id,v,u=''){
+    const el=document.getElementById(id);if(!el)return;
+    el.textContent=v==null?'—':`${fmt(v)}${u}`;el.className='kmv';
+    if(id==='k-alav')el.className+=' '+(v==null?'':(v>4?'bad':v>3?'warn':'ok'));
+    if(id==='k-mg'||id==='k-mgb')el.className+=' '+(v==null?'':(v>20?'ok':v>15?'warn':'bad'));
+    if(id==='k-icj')el.className+=' '+(v==null?'':(v>2.5?'ok':v>1.5?'warn':'bad'));
+    if(id==='k-cob')el.className+=' '+(v==null?'':(v>150?'ok':v>100?'warn':'bad'));
+    if(id==='k-fco')el.className+=' '+(fco>0?'ok':'bad');
+  }
+  sk('k-alav',alav,'x');sk('k-mg',mg,'%');sk('k-icj',icj,'x');sk('k-cob',cob,'%');
+  sk('k-dl',dl>0?dl/1000:null,' bi');sk('k-eb',eb>0?eb/1000:null,' bi');sk('k-fco',fco!=0?fco/1000:null,' bi');sk('k-mgb',mgb,'%');
+  document.getElementById('pv-alav').textContent=alav?fmt(alav)+'x':'—';
+  updPrev();
+  if(alav)calcSpread();
+}
+
+// TESE AUTO
+function autoTese(){
+  const nome=document.getElementById('f-nome').value||'A empresa';
+  const tk=document.getElementById('f-tk').value;
+  const eb=gv('f-eb',0),dl=gv('f-dl',0),rl=gv('f-rec',0),cx=gv('f-cx',0),fco=gv('f-fco',0);
+  const alav=eb>0&&dl>0?(dl/eb).toFixed(2):'—';
+  const mg=rl>0&&eb>0?(eb/rl*100).toFixed(1):'—';
+  const rec=document.getElementById('f-reco').value;
+  const rBR=document.getElementById('f-rat-br').value||'—';
+  const rGL=document.getElementById('f-rat-gl').value||'—';
+  const selic=document.getElementById('i-sel').value;
+  let t=`${nome}${tk?` (${tk})`:''}`;
+  if(eb>0)t+=` encerra o período com EBITDA Ajustado de R$ ${(eb/1000).toFixed(1)} bi`;
+  if(mg!=='—')t+=` (margem ${mg}%)`;
+  if(alav!=='—')t+=`. Alavancagem de ${alav}x DL/EBITDA`;
+  if(cx>0)t+=`. Caixa de R$ ${(cx/1000).toFixed(1)} bi`;
+  if(fco<0)t+=`. FCO negativo — monitorar geração de caixa`;
+  t+=`. Rating implícito: ${rBR} (BR) / ${rGL} (Global). Recomendação: ${rec}. Premissas: Selic ${selic}%`;
+  if(_setor&&SETS[_setor])t+=`, setor ${SETS[_setor].n}`;
+  t+='.';
+  document.getElementById('f-tese').value=t;
+}
+
+// GERAR PDF
 async function gerar(){
   const btn=document.getElementById('bg'),icon=document.getElementById('gi'),txt=document.getElementById('gt');
   btn.disabled=true;icon.className='spin';icon.textContent='⟳';txt.textContent='Gerando PDF...';
-  const tk=(document.getElementById('f-tk').value||'TICK3').toUpperCase();
+  const tk=(document.getElementById('f-tk').value||'EMPRESA').toUpperCase();
   const dfp={
     receita_liquida:gv('f-rec',44798),ebitda_ajustado:gv('f-eb',11796),resultado_financeiro:gv('f-rf',-6496),
     lucro_liquido:gv('f-ll',-1507),fco:gv('f-fco',-973),capex:gv('f-cap',5936),juros_pagos:gv('f-jur',4268),
     lucro_bruto:gv('f-lb',12394),caixa:gv('f-cx',16000),divida_liquida:gv('f-dl',41218),
-    alavancagem:Math.max(gv('f-eb',11796),1)>0?gv('f-dl',41218)/Math.max(gv('f-eb',11796),1):3.47,
+    alavancagem:gv('f-eb',11796)>0?gv('f-dl',41218)/gv('f-eb',11796):3.47,
     margem_ebitda:gv('f-rec',44798)>0?gv('f-eb',11796)/gv('f-rec',44798)*100:25.1,
     margem_bruta:gv('f-rec',44798)>0?gv('f-lb',12394)/gv('f-rec',44798)*100:27.7,
     volume_mineracao_mt:45.849,
-    receita_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.r||22026,
-    ebitda_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.e||2194,
-    receita_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.r||15401,
-    ebitda_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.e||6309,
-    receita_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.r||4906,
-    ebitda_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.e||1290,
-    receita_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.r||4374,
-    ebitda_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.e||1933,
-    receita_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.r||682,
-    ebitda_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.e||255,
+    receita_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.r||22026,ebitda_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.e||2194,
+    receita_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.r||15401,ebitda_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.e||6309,
+    receita_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.r||4906,ebitda_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.e||1290,
+    receita_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.r||4374,ebitda_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.e||1933,
+    receita_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.r||682,ebitda_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.e||255,
   };
-  const fre={
-    divida_bruta:gv('f-db',52924),divida_me_pct:gv('f-pme',64),divida_brl_pct:100-gv('f-pme',64),
-    taxa_usd:gv('f-tusd',6.42),taxa_brl:gv('f-tbrl',17.05),taxa_eur:3.53,
-    contingencias:47419,hedge_usd_bi:7.9,covenants_ok:true,
-    vencimentos:{'2026':gv('f-v26',10523),'2027':7806,'2028':11401,'2029':2474,'2030':5952,'2031':6605,'apos_2031':8831},
-  };
+  const fre={divida_bruta:gv('f-db',52924),divida_me_pct:64,divida_brl_pct:36,taxa_usd:6.42,taxa_brl:17.05,taxa_eur:3.53,contingencias:47419,hedge_usd_bi:7.9,covenants_ok:true,vencimentos:{'2026':gv('f-v26',10523),'2027':7806,'2028':11401,'2029':2474,'2030':5952,'2031':6605,'apos_2031':8831},composicao_divida:dividas};
   const mac={
-    ...getMac(),
-    empresa_nome:document.getElementById('f-nome').value||'Empresa',
-    empresa_ticker:tk,
-    empresa_segmentos:document.getElementById('f-segs').value||'',
-    empresa_database:document.getElementById('f-dt').value||'31/12/2025',
-    recomendacao:document.getElementById('f-reco').value||'MANTER',
-    rating:document.getElementById('f-rat').value||'B1 / BB-',
-    tese_resumo:document.getElementById('f-tese').value||'',
+    usd_brl:parseFloat(document.getElementById('i-usd').value)||5.80,selic:parseFloat(document.getElementById('i-sel').value)||14.75,
+    ipca:parseFloat(document.getElementById('i-ipc').value)||5.00,cdi:parseFloat(document.getElementById('i-cdi').value)||14.65,
+    minerio_fe:102,hrc:575,treasury_10y:parseFloat(document.getElementById('i-t10').value)||4.30,spread_alvo:parseInt(document.getElementById('i-spd').value)||425,
+    empresa_nome:document.getElementById('f-nome').value||'Empresa',empresa_ticker:tk,empresa_segmentos:document.getElementById('f-segs').value||'',
+    empresa_database:document.getElementById('f-dt').value||'31/12/2025',empresa_cnpj:document.getElementById('f-cnpj').value||'',
+    recomendacao:document.getElementById('f-reco').value||'MANTER',rating:document.getElementById('f-rat-gl').value||'B1/BB-',
+    rating_br:document.getElementById('f-rat-br').value||'brBB',tese_resumo:document.getElementById('f-tese').value||'',setor:_setor||'',
   };
   try{
     const res=await fetch('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dfp,fre,macro:mac})});
     if(!res.ok){const e=await res.json();throw new Error(e.error||'Erro');}
-    const blob=await res.blob();
-    const url=URL.createObjectURL(blob);
-    const a=document.createElement('a');a.href=url;a.download=`${tk}_Analise_Credito_${new Date().toISOString().slice(0,10)}.pdf`;a.click();
-    URL.revokeObjectURL(url);
+    const blob=await res.blob();const url=URL.createObjectURL(blob);
+    const a=document.createElement('a');a.href=url;a.download=`${tk}_Analise_Credito_${new Date().toISOString().slice(0,10)}.pdf`;a.click();URL.revokeObjectURL(url);
     lg(`PDF gerado: ${tk}_Analise_Credito.pdf`,'ok');
   }catch(e){lg(`Erro: ${e.message}`,'err');}
   finally{btn.disabled=false;icon.className='';icon.textContent='⬇';txt.textContent='Gerar Análise de Crédito em PDF';}
 }
 
-// Init sliders
-['usd','sel','ipc','cdi','min','hrc','t10','spd'].forEach(k=>{const el=document.getElementById(`i-${k}`);if(el)si(k);});
-calc();
+// INIT
+['usd','sel','ipc','cdi','t10','spd'].forEach(k=>{si(k);});
+calc();fetchT10();
+document.getElementById('f-reco').addEventListener('change',()=>{updPrev();});
 </script>
 </body>
 </html>
