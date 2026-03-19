@@ -408,8 +408,8 @@ def gerar_pdf(dfp, fre, macro):
     eb    = dfp.get('ebitda_ajustado') or 0
     mg_eb = dfp.get('margem_ebitda') or (round(eb/rl*100,1) if rl else 0)
     ll    = dfp.get('lucro_liquido') or 0
-    alav  = dfp.get('alavancagem') or (round(dl/eb,2) if eb else 0)
     dl    = dfp.get('divida_liquida') or 0
+    alav  = dfp.get('alavancagem') or (round(dl/eb,2) if eb else 0)
     caixa = dfp.get('caixa') or 0
     fco   = dfp.get('fco') or 0
     capex = dfp.get('capex') or 0
@@ -440,9 +440,9 @@ def gerar_pdf(dfp, fre, macro):
         f'R$ {eb/1000:.1f} bilhões (margem {mg_eb:.1f}% — recorde histórico, +15,3% a/a). '
         f'O resultado financeiro '
         f'de R$ {abs(rf)/1000:.1f} bilhões — impactado por despesas com juros de R$ {juros/1000:.1f} bilhões '
-        f'e variação cambial negativa — conduziu ao segundo prejuízo líquido consecutivo (R$ {abs(ll)/1000:.1f} bilhões). '
-        f'A alavancagem atingiu {alav:.2f}x Dívida Líquida/EBITDA, acima do guidance interno de 2,5x, porém com '
-        f'caixa gerencial de R$ {caixa/1000:.1f} bilhões cobrindo {caixa/venc_2026*100:.0f}% da dívida de curto prazo. '
+        f'e variação cambial negativa — conduziu ao resultado líquido de R$ {ll/1000:.1f} bilhões. '
+        f'A alavancagem atingiu {alav:.2f}x Dívida Líquida/EBITDA, porém com '
+        f'caixa gerencial de R$ {caixa/1000:.1f} bilhões' + (f' cobrindo {caixa/venc_2026*100:.0f}% da dívida de curto prazo.' if venc_2026 > 0 else '.') +
         f''
         f'', s['body']))
     story.append(SP(4))
@@ -459,7 +459,7 @@ def gerar_pdf(dfp, fre, macro):
         ['Dívida Líquida (R$ bi)',       '~43', '34,2',  f'{dl/1000:.1f}',    'Redução'],
         ['ICJ — EBITDA/Juros (x)',       '1,7*', '1,4',  f'{icj:.2f}',        'acima 2,5x'],
         ['FCO (R$ bi)',                   '4,5*', '8,7',  f'{fco/1000:.1f}',   'Positivo'],
-        ['Caixa / Dívida CP (%)',        '—',   '264%',  f'{caixa/venc_2026*100:.0f}%', 'acima 150%'],
+        ['Caixa / Dívida CP (%)',        '—',   '264%',  f'{caixa/venc_2026*100:.0f}%' if venc_2026 > 0 else '—', 'acima 150%'],
         ['Lucro (Prejuízo) Líquido (R$ bi)', '(2,1)*', '(1,5)', f'({abs(ll)/1000:.1f})', '—'],
     ]
     rc = []
@@ -498,22 +498,42 @@ def gerar_pdf(dfp, fre, macro):
     story.append(SP(3))
 
     mac_hdr = [P('Variável', s['th']), P('Valor Utilizado', s['th']),
-               P(f"Impacto em {macro.get('empresa_nome','Empresa')[:15]}", s['th']), P('Sensibilidade', s['th'])]
-    divida_cdi = db * 0.27
-    vol_min_mt = dfp.get('volume_mineracao_mt', 45.849)
+               P(f"Impacto em {macro.get('empresa_nome','Empresa')[:20]}", s['th']), P('Sensibilidade', s['th'])]
+    _setor_mac = macro.get('setor','')
+    _pct_me = fre.get('divida_me_pct') or 0
+    _pct_brl = fre.get('divida_brl_pct') or (100 - _pct_me)
+    divida_cdi = db * (_pct_brl/100) if db > 0 else 0
     imp_selic = divida_cdi * 0.01
-    imp_min_10 = vol_min_mt * usd_brl * 10 * 0.35
-    imp_cam = db * 0.64 * 0.01
+    imp_cam = db * (_pct_me/100) * 0.01 if db > 0 else 0
+    imp_ebitda_1pct = eb * 0.01 if eb > 0 else 0
 
     mac_rows = [
-        ['USD / BRL (câmbio)',     f'R$ {usd_brl:.2f}',  'Receita mineração (USD) + Dívida ME (64%)', f'R$1,00 = ±R$ {vol_min_mt*1000*0.30/1000:.0f}mi EBITDA / ±R$ {imp_cam/1000:.1f}bi dívida'],
-        ['Selic (% a.a.)',         f'{selic:.2f}%',       'Custo dívida BRL (~27% flutuante)',           f'+1 p.p. = ±R$ {imp_selic:,.0f}mi desp. fin.'],
-        ['IPCA (% a.a.)',          f'{ipca:.2f}%',        'Contratos cimento/logística, IGP-M',          f'+1 p.p. = ±0,3% receita serviços'],
-        ['CDI (% a.a.)',           f'{cdi:.2f}%',         'Rendimento aplicações financeiras + dívida',  f'Proxy Selic menos spread'],
-        ['Minério Fe 62% (US$/t)', f'US$ {minerio:.0f}', 'Receita e EBITDA mineração (~41% margem)',     f'US$10/t = ±R$ {imp_min_10/1000:.1f}bi EBITDA'],
-        ['HRC China Export (US$/t)',f'US$ {hrc:.0f}',    'Receita siderurgia (referência de preço)',     f'US$50/t = ±R$ 0,8bi receita'],
-        ['Treasury 10Y EUA (%)',   f'{t10y:.2f}%',        f"Benchmark dívida USD — {macro.get('empresa_ticker','')}",          f'Yield alvo: {t10y+macro.get("spread_alvo",425)/100:.2f}% = spread ~{macro.get("spread_alvo",425)} bps'],
+        ['USD / BRL (câmbio)', f'R$ {usd_brl:.2f}',
+         f'Dívida ME ({_pct_me:.0f}% do total)' if _pct_me > 0 else 'Câmbio de referência',
+         f'R$1,00 = ±R$ {imp_cam/1000:.1f}bi na dívida' if imp_cam > 0 else 'Sem dívida ME'],
+        ['Selic (% a.a.)', f'{selic:.2f}%',
+         f'Custo dívida BRL ({_pct_brl:.0f}% flutuante)' if divida_cdi > 0 else 'Taxa de referência BR',
+         f'+1 p.p. = ±R$ {imp_selic:,.0f}mi desp. fin.' if imp_selic > 0 else 'Referência CDI'],
+        ['IPCA (% a.a.)', f'{ipca:.2f}%',
+         'Contratos indexados, reajustes de receita',
+         '+1 p.p. = pressão em custos e receitas'],
+        ['CDI (% a.a.)', f'{cdi:.2f}%',
+         'Custo dívida CDI + e aplicações financeiras',
+         f'Proxy Selic — spread atual: {(selic-cdi)*100:.0f} bps'],
+        ['Treasury 10Y EUA (%)', f'{t10y:.2f}%',
+         f"Benchmark dívida USD — {macro.get('empresa_ticker','')}",
+         f'Yield alvo: {t10y+macro.get("spread_alvo",425)/100:.2f}% (spread {macro.get("spread_alvo",425)} bps)'],
     ]
+    # Adicionar linha setorial relevante
+    if _setor_mac in ('mineracao','siderurgia'):
+        mac_rows.insert(4, ['Minério Fe 62% (US$/t)', f'US$ {minerio:.0f}',
+            'Principal driver de receita e EBITDA', f'US$10/t = ±{imp_ebitda_1pct/eb*100*0.41:.1f}% EBITDA' if eb > 0 else '—'])
+    elif _setor_mac == 'petroleo':
+        mac_rows.insert(4, ['Petróleo Brent (US$/bbl)', 'US$ 78',
+            'Principal driver de receita E&P', 'US$10/bbl = ±impacto direto na receita'])
+    elif _setor_mac == 'agro':
+        mac_rows.insert(4, ['Commodities Agrícolas', 'Var.',
+            'Preços de soja/milho impactam receita', 'Correlação com câmbio e demanda China'])
     md = [mac_hdr] + [[P(r[j], s['tl'] if j==0 else (s['tlb'] if j==1 else s['tl'])) for j in range(4)] for r in mac_rows]
     story.append(tbl(md, [W*0.22, W*0.14, W*0.32, W*0.32]))
     story.append(SP(5))
@@ -526,26 +546,38 @@ def gerar_pdf(dfp, fre, macro):
 
     # DRE
     story.append(P('3.1 Demonstração de Resultado Consolidada', s['ssh']))
-    dre_hdr = [P('(R$ milhões)', s['th']), P('2024A', s['th']),
-               P('2025A', s['th']), P('Var. a/a', s['th']), P('Comentário', s['th'])]
+    _ano_ref = macro.get('empresa_database','2025').split('/')[-1] if '/' in macro.get('empresa_database','2025') else macro.get('empresa_database','2025')
+    _ano_ant = str(int(_ano_ref) - 1) if _ano_ref.isdigit() else 'Anterior'
+    lb = dfp.get('lucro_bruto') or 0
+    mg_b = dfp.get('margem_bruta') or (round(lb/rl*100,1) if rl > 0 else 0)
+    # Variação YoY — só mostra se tiver dado do ano anterior (campo prev_*)
+    def var_yoy(atual, ant_key):
+        ant = dfp.get(ant_key)
+        if ant and ant != 0 and atual:
+            pct = (atual - ant) / abs(ant) * 100
+            return f'{pct:+.1f}%'
+        return '—'
+    dre_hdr = [P('(R$ milhões)', s['th']), P(f'{_ano_ant}A', s['th']),
+               P(f'{_ano_ref}A', s['th']), P('Var. a/a', s['th']), P('Comentário', s['th'])]
+    def fmt_val(v, neg=False):
+        if not v: return '—'
+        return f'({abs(v):,.0f})' if neg and v < 0 else f'{v:,.0f}'
     dre_rows = [
-        ['Receita Líquida',        '43.687', f'{rl:,.0f}',    '+2,5%',  'Mineração e logística compensaram queda em siderurgia'],
-        ['CPV',                    '(31.991)', f'({32404:,.0f})', '+1,3%','Custos controlados; energia e matérias-primas estáveis'],
-        ['Lucro Bruto',            '11.697', f'{dfp.get("lucro_bruto",12394):,.0f}', '+6,0%', f'Margem bruta {dfp.get("margem_bruta",27.7):.1f}% vs 26,8% em 2024'],
-        ['EBIT',                   '4.270',  '4.817',  '+12,8%', 'Melhora operacional consistente'],
-        ['EBITDA Ajustado',        '10.234', f'{eb:,.0f}', '+15,3%', f'Margem {mg_eb:.1f}% — recorde histórico'],
-        ['Resultado Financeiro',   '(5.813)', f'({abs(rf):,.0f})', '+11,7%', 'Juros + variação cambial negativa de R$ 1,6bi'],
-        ['Lucro (Prejuízo) Líquido','(1.538)', f'({abs(ll):,.0f})', '+2,0%', '2º ano consecutivo de prejuízo líquido'],
-        ['FCO',                    '8.651',  f'{fco:,.0f}',   'n.m.',  'Inversão por variação de capital de giro'],
-        ['CAPEX',                  '(5.494)', f'({capex:,.0f})', '+7,5%', 'Imobilizado (expansão mina) + manutenção'],
+        ['Receita Líquida',         fmt_val(dfp.get('prev_receita')),     fmt_val(rl),          var_yoy(rl,'prev_receita'),    f'Receita consolidada — margem bruta {mg_b:.1f}%'],
+        ['Lucro Bruto',             fmt_val(dfp.get('prev_lucro_bruto')), fmt_val(lb),          var_yoy(lb,'prev_lucro_bruto'),f'Margem bruta: {mg_b:.1f}%'],
+        ['EBITDA Ajustado',         fmt_val(dfp.get('prev_ebitda')),      fmt_val(eb),          var_yoy(eb,'prev_ebitda'),     f'Margem EBITDA: {mg_eb:.1f}%'],
+        ['Resultado Financeiro',    fmt_val(dfp.get('prev_rf'),True),     fmt_val(rf,True),     '—',                           'Inclui juros e variação cambial'],
+        ['Lucro (Prejuízo) Líquido',fmt_val(dfp.get('prev_ll'),True),    fmt_val(ll,True),     var_yoy(ll,'prev_ll'),         'Resultado líquido do período'],
+        ['FCO',                     fmt_val(dfp.get('prev_fco')),         fmt_val(fco),         var_yoy(fco,'prev_fco'),       'Fluxo de caixa operacional'],
+        ['CAPEX',                   fmt_val(dfp.get('prev_capex'),True),  fmt_val(capex,True),  '—',                           'Investimentos em imobilizado'],
     ]
-    bold_rows = {4, 5, 6}
-    extra = [('FONTNAME',(0,i+1),(-1,i+1),'Helvetica-Bold') for i in bold_rows]
-    extra += [('BACKGROUND',(0,5),(-1,5), HexColor('#FEF3C7')),
-              ('BACKGROUND',(0,6),(-1,6), HexColor('#FEE2E2')),
-              ('BACKGROUND',(0,5),(-1,4), HexColor('#DCFCE7'))]
+    bold_rows = {2, 3, 4}
+    extra_dre = [('FONTNAME',(0,i+1),(-1,i+1),'Helvetica-Bold') for i in bold_rows]
+    extra_dre += [('BACKGROUND',(0,3),(-1,3), HexColor('#FEF3C7')),
+                  ('BACKGROUND',(0,4),(-1,4), HexColor('#FEE2E2')),
+                  ('BACKGROUND',(0,2),(-1,2), HexColor('#DCFCE7'))]
     dd = [dre_hdr] + [[P(r[j], s['tl'] if j==0 else (s['tl'] if j==4 else s['tc'])) for j in range(5)] for r in dre_rows]
-    story.append(tbl(dd, [W*0.22, W*0.13, W*0.13, W*0.10, W*0.42], extra))
+    story.append(tbl(dd, [W*0.22, W*0.13, W*0.13, W*0.10, W*0.42], extra_dre))
     story.append(SP(5))
 
     # Segmentos
@@ -565,7 +597,7 @@ def gerar_pdf(dfp, fre, macro):
         segs = []  # Sem segmentos — pula a tabela
     sd = [seg_hdr] + [
         [P(nm, s['tl']), P(f'{rc_s:,.0f}', s['tc']),
-         P(f'{rc_s/rl*100:.1f}%', s['tc']),
+         P(f'{rc_s/rl*100:.1f}%' if rl > 0 else '—', s['tc']),
          P(f'{eb_s:,.0f}', s['tc']),
          P(f'{eb_s/rc_s*100:.1f}%', s['tc']),
          P(dest, s['tl'])]
@@ -645,12 +677,12 @@ def gerar_pdf(dfp, fre, macro):
     story.append(P('4.2 Indicadores de Crédito', s['ssh']))
     ic_hdr = [P('Métrica', s['th']), P('2025A', s['th']), P('Target Int.', s['th']),
               P('Threshold BB', s['th']), P('Situação', s['th'])]
-    cov_cp = caixa/venc_2026*100
+    cov_cp = caixa/venc_2026*100 if venc_2026 > 0 else 0
     ic_rows = [
         ['DL / EBITDA Ajustado (x)',    f'{alav:.2f}x',            '2,5x',          'abaixo 3,0x',   '⚠ Acima' if alav > 3.0 else '✓ OK'],
         ['ICJ — EBITDA / Juros (x)',    f'{icj:.2f}x',             'acima 2,5x',    'acima 2,0x',    '⚠ Abaixo' if icj < 2.0 else '✓ OK'],
-        ['Dív. Bruta / EBITDA (x)',     f'{db/eb:.2f}x',           'abaixo 5,0x',   'abaixo 5,5x',   '⚠ Acima' if db/eb > 5.0 else '✓ OK'],
-        ['FCO / Dívida Bruta (%)',      f'{fco/db*100:.1f}%',      'acima 10%',     'acima 8%',      '⚠ Negativo' if fco < 0 else '✓ OK'],
+        ['Dív. Bruta / EBITDA (x)',     f'{db/eb:.2f}x' if eb > 0 else '—', 'abaixo 5,0x', 'abaixo 5,5x', '⚠ Acima' if (eb > 0 and db/eb > 5.0) else '✓ OK'],
+        ['FCO / Dívida Bruta (%)',      f'{fco/db*100:.1f}%' if db > 0 else '—', 'acima 10%', 'acima 8%', '⚠ Negativo' if fco < 0 else '✓ OK'],
         ['Caixa / Dív. CP (%)',         f'{cov_cp:.0f}%',          'acima 150%',    'acima 100%',    '✓ OK' if cov_cp > 150 else '⚠ Atenção'],
         ['DL / Patrimônio Líquido (x)', f'{dl/15700:.2f}x',        'abaixo 2,5x',   'abaixo 3,0x',   '⚠ Elevado' if dl/15700 > 2.5 else '✓ OK'],
         ['Margem EBITDA Aj. (%)',       f'{mg_eb:.1f}%',           'acima 22%',     'acima 18%',     '✓ OK' if mg_eb > 22 else '⚠ Atenção'],
@@ -681,56 +713,84 @@ def gerar_pdf(dfp, fre, macro):
     story.append(P(_sens_desc, s['body']))
     story.append(SP(3))
 
-    imp_selic_100   = divida_cdi * 0.01
-    imp_min_10_calc = vol_min_mt * usd_brl * 10 * 0.35
-    imp_cam_1       = vol_min_mt * 1000 * 0.30
-    imp_db_cam      = db * 0.64 * 0.01
+    _pct_me2 = fre.get('divida_me_pct') or 0
+    imp_selic_100 = divida_cdi * 0.01 if divida_cdi > 0 else eb * 0.02
+    imp_ebitda_5pct = eb * 0.05 if eb > 0 else 0
+    imp_cam_db = db * (_pct_me2/100) / usd_brl * 0.50 if db > 0 and _pct_me2 > 0 else 0
 
     sh_hdr = [P('Variável', s['th']), P('Choque', s['th']), P('Impacto EBITDA (R$ mi)', s['th']),
               P('Impacto DL (R$ mi)', s['th']), P('DL/EBITDA pós-choque', s['th'])]
+
+    def alav_safe(dl_n, eb_n):
+        return f'{dl_n/eb_n:.2f}x' if eb_n > 0 else 'n/a'
+
     sh_rows = [
-        ['Selic / CDI',        '+1,0 p.p.', f'-{imp_selic_100:,.0f} (desp. fin.)',       '—',                 f'{(dl)/(eb-imp_selic_100):.2f}x'],
-        ['Selic / CDI',        '-1,0 p.p.', f'+{imp_selic_100:,.0f} (desp. fin.)',       '—',                 f'{(dl)/(eb+imp_selic_100):.2f}x'],
-        ['Minério Fe',         '+US$10/t',  f'+{imp_min_10_calc:,.0f}',                  '—',                 f'{dl/(eb+imp_min_10_calc):.2f}x'],
-        ['Minério Fe',         '-US$10/t',  f'-{imp_min_10_calc:,.0f}',                  '—',                 f'{dl/(eb-imp_min_10_calc):.2f}x'],
-        ['USD / BRL',          '+R$ 0,50',  f'+{imp_cam_1*0.5*0.30:,.0f} (rec. min.)',   f'+{db*0.64/usd_brl*0.5:,.0f} (dívida ME)', f'{(dl+db*0.64/usd_brl*0.5)/(eb+imp_cam_1*0.5*0.30):.2f}x'],
-        ['USD / BRL',          '-R$ 0,50',  f'-{imp_cam_1*0.5*0.30:,.0f} (rec. min.)',   f'-{db*0.64/usd_brl*0.5:,.0f} (dívida ME)', f'{(dl-db*0.64/usd_brl*0.5)/(eb-imp_cam_1*0.5*0.30):.2f}x'],
-        ['HRC (siderurgia)',   '+US$50/t',  '+~800',                                      '—',                 f'{dl/(eb+800):.2f}x'],
-        ['HRC (siderurgia)',   '-US$50/t',  '-~800',                                      '—',                 f'{dl/(eb-800):.2f}x'],
+        ['Selic / CDI', '+1,0 p.p.',
+         f'-{imp_selic_100:,.0f} (desp. fin.)' if imp_selic_100 else '—',
+         '—', alav_safe(dl, eb - imp_selic_100)],
+        ['Selic / CDI', '-1,0 p.p.',
+         f'+{imp_selic_100:,.0f} (desp. fin.)' if imp_selic_100 else '—',
+         '—', alav_safe(dl, eb + imp_selic_100)],
+        ['EBITDA', '-5% (queda operacional)',
+         f'-{imp_ebitda_5pct:,.0f}' if imp_ebitda_5pct else '—',
+         '—', alav_safe(dl, eb - imp_ebitda_5pct)],
+        ['EBITDA', '+5% (melhora operacional)',
+         f'+{imp_ebitda_5pct:,.0f}' if imp_ebitda_5pct else '—',
+         '—', alav_safe(dl, eb + imp_ebitda_5pct)],
+        ['USD / BRL', '+R$ 0,50',
+         '—',
+         f'+{imp_cam_db:,.0f} (dívida ME)' if imp_cam_db else '—',
+         alav_safe(dl + imp_cam_db, eb)],
+        ['USD / BRL', '-R$ 0,50',
+         '—',
+         f'-{imp_cam_db:,.0f} (dívida ME)' if imp_cam_db else '—',
+         alav_safe(dl - imp_cam_db, eb)],
     ]
+    # Linha extra setorial
+    _setor_s = macro.get('setor','')
+    if _setor_s in ('mineracao','siderurgia'):
+        imp_com = eb * 0.08
+        sh_rows.insert(4, ['Commodity principal', '+10%', f'+{imp_com:,.0f}', '—', alav_safe(dl, eb+imp_com)])
+        sh_rows.insert(5, ['Commodity principal', '-10%', f'-{imp_com:,.0f}', '—', alav_safe(dl, eb-imp_com)])
+    elif _setor_s == 'petroleo':
+        imp_brent = eb * 0.10
+        sh_rows.insert(4, ['Brent (US$/bbl)', '+US$10/bbl', f'+{imp_brent:,.0f}', '—', alav_safe(dl, eb+imp_brent)])
+        sh_rows.insert(5, ['Brent (US$/bbl)', '-US$10/bbl', f'-{imp_brent:,.0f}', '—', alav_safe(dl, eb-imp_brent)])
+
     sh_d = [sh_hdr] + [[P(r[0],s['tl'])] + [P(r[j],s['tc']) for j in range(1,5)] for r in sh_rows]
-    story.append(tbl(sh_d, [W*0.17, W*0.12, W*0.27, W*0.25, W*0.19]))
-    story.append(P(f'Base: {vol_min_mt:.1f} Mt mineração; R$ {divida_cdi/1000:.1f}bi dívida CDI-linked; 30% mg EBITDA incremental mineração; câmbio base R$ {usd_brl:.2f}.', s['cap']))
+    story.append(tbl(sh_d, [W*0.20, W*0.18, W*0.22, W*0.20, W*0.20]))
+    _base_txt = f'Dívida CDI-linked estimada: R$ {divida_cdi/1000:.1f}bi. Câmbio base: R$ {usd_brl:.2f}.'
+    if _pct_me2 > 0: _base_txt += f' Dívida ME: {_pct_me2:.0f}% do total.'
+    story.append(P(_base_txt, s['cap']))
     story.append(SP(4))
 
-    # Cenários
-    story.append(P('5.1 Cenários de Alavancagem 2026E', s['ssh']))
-    story.append(P(f'Projeções com premissas do usuário (minério US$ {minerio:.0f}/t, câmbio R$ {usd_brl:.2f}) e diferentes hipóteses de desinvestimento:', s['body']))
+    # Cenários de alavancagem genéricos
+    story.append(P('5.1 Cenários de Alavancagem — Projeção', s['ssh']))
+    story.append(P(f'Simulação de DL/EBITDA sob diferentes hipóteses de desempenho operacional e redução de dívida. Base: EBITDA R$ {eb/1000:.1f}bi, DL R$ {dl/1000:.1f}bi.', s['body']))
     story.append(SP(3))
 
-    def cenario_eb(min_p, growth=1.05):
-        return eb * (min_p / 105) * growth
-
     c_rows_data = [
-        ('Stress',   85,  0,   1.00, HexColor('#FEE2E2')),
-        ('Base',     minerio, 5000, 1.05, HexColor('#FEF3C7')),
-        ('Otimista', 125, 10000, 1.10, HexColor('#DCFCE7')),
+        ('Stress',   0.90, 0,         HexColor('#FEE2E2')),
+        ('Base',     1.00, dl*0.05,   HexColor('#FEF3C7')),
+        ('Otimista', 1.10, dl*0.15,   HexColor('#DCFCE7')),
     ]
-    c_hdr = [P('Cenário', s['th']), P('Minério (US$/t)', s['th']), P('Desinv. (R$ bi)', s['th']),
-             P('EBITDA 2026E', s['th']), P('DL 2026E', s['th']), P('DL/EBITDA', s['th']), P('Situação', s['th'])]
+    c_hdr = [P('Cenário', s['th']), P('EBITDA 2026E', s['th']),
+             P('Redução DL', s['th']), P('DL 2026E', s['th']), P('DL/EBITDA', s['th']), P('Situação', s['th'])]
     cen_d = [c_hdr]
     cen_rc = []
-    for i, (nome, min_p, des, grow, cor) in enumerate(c_rows_data):
-        eb_c = cenario_eb(min_p, grow)
-        dl_c = dl - des
-        alav_c = dl_c / eb_c
+    for i, (nome, eb_mult, dl_red, cor) in enumerate(c_rows_data):
+        eb_c = eb * eb_mult
+        dl_c = max(0, dl - dl_red)
+        alav_c = dl_c / eb_c if eb_c > 0 else 0
         sit = '⚠ Crítico' if alav_c > 4.0 else ('⚠ Monitorar' if alav_c > 3.0 else '✓ Convergindo')
-        cen_d.append([P(nome, s['tlb']), P(f'US$ {min_p:.0f}', s['tc']),
-                      P(f'R$ {des/1000:.0f}bi', s['tc']), P(f'R$ {eb_c/1000:.1f}bi', s['tc']),
-                      P(f'R$ {dl_c/1000:.1f}bi', s['tc']), P(f'{alav_c:.2f}x', s['tc']),
+        cen_d.append([P(nome, s['tlb']),
+                      P(f'R$ {eb_c/1000:.1f}bi', s['tc']),
+                      P(f'R$ {dl_red/1000:.1f}bi', s['tc']),
+                      P(f'R$ {dl_c/1000:.1f}bi', s['tc']),
+                      P(f'{alav_c:.2f}x', s['tc']),
                       P(sit, s['tc'])])
         cen_rc.append(('BACKGROUND',(0,i+1),(-1,i+1), cor))
-    story.append(tbl(cen_d, [W*0.13,W*0.14,W*0.13,W*0.13,W*0.13,W*0.12,W*0.22], cen_rc))
+    story.append(tbl(cen_d, [W*0.13, W*0.15, W*0.15, W*0.15, W*0.13, W*0.29], cen_rc))
     story.append(SP(5))
 
     # ────────────────────────────────────────────────────────────────────
@@ -742,25 +802,78 @@ def gerar_pdf(dfp, fre, macro):
     r_hdr = [P('Risco', s['th']), P('Impacto', s['th']),
              P('Probabilidade', s['th']), P('Comentário', s['th'])]
     selic_risco = 'ALTO' if selic >= 15.0 else 'MÉDIO'
-    min_risco   = 'ALTO' if minerio < 95 else 'MÉDIO'
-    risk_rows = [
-        ['Refinanciamento 2026 (R$10,5bi)',        'ALTO',       'MÉDIA',
-         f'Caixa de R${caixa/1000:.1f}bi cobre vencimento. Custo elevado na Selic {selic:.2f}%.'],
-        ['Fracasso nos desinvestimentos',           'MUITO ALTO', 'MÉDIA',
-         'Sem alienações: DL/EBITDA permanece acima de 3,5x até 2027. Catalisador central.'],
-        [f'Preço minério abaixo US$85/t (atual US${minerio:.0f}/t)', min_risco, 'BAIXA' if minerio>95 else 'MÉDIA',
-         f'EBITDA mineração cai ~R$2,5bi. DL/EBITDA ultrapassa 4,0x. Monitorar China/demanda global.'],
-        [f'Selic / CDI elevado (atual {selic:.2f}%)',selic_risco, 'MÉDIA',
-         f'27% dívida flutuante. Cada +1pp = R${imp_selic_100:,.0f}mi em despesas financeiras adicionais.'],
-        ['Volatilidade cambial (64% dívida ME)',    'ALTO',       'MÉDIA',
-         f'Hedge US$7,9bi eficaz. Exportações de minério são hedge natural. USD/BRL atual: R${usd_brl:.2f}.'],
-        ['Barragens — evento ambiental',            'MUITO ALTO', 'BAIXA',
-         'Programa de descaracterização em andamento. B4 em obras. Prazo: 2030.'],
-        ['Contingências fiscais (R$47,4bi possível)','MÉDIO',     'BAIXA',
-         f'Não provisionado (provisão R$874mi). Prazos longos. IRPJ/CSLL e ágio são os maiores.'],
-        ['FCO negativo persistente',               'ALTO',        'MÉDIA',
-         'FCO -R$0,97bi em 2025. Variação de capital de giro e juros pagos são os vetores.'],
-    ]
+    _pct_me_r = fre.get('divida_me_pct') or 0
+    _venc_cp = venc_2026 or (dl * 0.20)  # estimativa se não informado
+    # Riscos genéricos baseados nos dados reais da empresa
+    risk_rows = []
+
+    # Risco de refinanciamento (se tiver vencimento relevante)
+    if _venc_cp > 0:
+        cob_cp = caixa / _venc_cp if _venc_cp > 0 else 0
+        risco_refin = 'ALTO' if cob_cp < 1.0 else 'MÉDIO'
+        risk_rows.append([
+            f'Refinanciamento CP (R$ {_venc_cp/1000:.1f}bi)',
+            risco_refin, 'MÉDIA' if cob_cp < 1.2 else 'BAIXA',
+            f'Caixa R$ {caixa/1000:.1f}bi cobre {cob_cp*100:.0f}% do vencimento. Selic {selic:.2f}%.'
+        ])
+
+    # Risco de alavancagem
+    alav_atual = dl/eb if eb > 0 else 0
+    if alav_atual > 0:
+        risco_alav = 'MUITO ALTO' if alav_atual > 5 else ('ALTO' if alav_atual > 3.5 else 'MÉDIO')
+        risk_rows.append([
+            f'Alavancagem elevada ({alav_atual:.2f}x DL/EBITDA)',
+            risco_alav, 'MÉDIA',
+            f'Redução depende de crescimento de EBITDA e/ou amortização de dívida.'
+        ])
+
+    # Risco de taxa de juros
+    risk_rows.append([
+        f'Selic / CDI elevado ({selic:.2f}% a.a.)',
+        selic_risco, 'MÉDIA',
+        f'Impacto estimado de R$ {imp_selic_100:,.0f}mi por +1pp na taxa.'
+        if imp_selic_100 > 0 else f'Monitorar custo da dívida com Selic {selic:.2f}%.'
+    ])
+
+    # Risco cambial (se tiver dívida ME)
+    if _pct_me_r > 20:
+        risk_rows.append([
+            f'Volatilidade cambial ({_pct_me_r:.0f}% dívida em ME)',
+            'ALTO', 'MÉDIA',
+            f'Hedge cambial reduz exposição. USD/BRL atual: R$ {usd_brl:.2f}.'
+        ])
+
+    # Risco de FCO negativo
+    if fco < 0:
+        risk_rows.append([
+            'FCO Negativo — pressão de liquidez',
+            'ALTO', 'ALTA',
+            f'FCO de R$ {fco/1000:.1f}bi. Monitorar capital de giro e geração operacional.'
+        ])
+
+    # Risco setorial
+    _setor_r = macro.get('setor','')
+    if _setor_r == 'petroleo':
+        risk_rows.append(['Volatilidade do Brent', 'ALTO', 'MÉDIA',
+            'Preço do petróleo impacta diretamente receita e EBITDA E&P.'])
+    elif _setor_r in ('mineracao','siderurgia'):
+        risk_rows.append(['Volatilidade de commodities', 'ALTO', 'MÉDIA',
+            'Preços de minério/aço correlacionados à demanda China e ciclo global.'])
+    elif _setor_r == 'varejo':
+        risk_rows.append(['Inadimplência do consumidor', 'MÉDIO', 'MÉDIA',
+            f'Selic {selic:.2f}% pressionando renda. Monitorar SSS e inadimplência.'])
+    elif _setor_r == 'saude':
+        risk_rows.append(['Inflação médica acima do repasse', 'ALTO', 'ALTA',
+            'Sinistralidade elevada comprime margens se reajuste de ANS for insuficiente.'])
+    elif _setor_r == 'bancos':
+        risk_rows.append(['Inadimplência (NPL)', 'MÉDIO', 'MÉDIA',
+            f'Selic {selic:.2f}% eleva risco de crédito da carteira. Monitorar provisões.'])
+
+    # Risco regulatório/macro sempre presente
+    risk_rows.append([
+        'Risco macro / fiscal Brasil', 'MÉDIO', 'MÉDIA',
+        f'Selic {selic:.2f}%, IPCA {ipca:.2f}%. Custo de capital elevado pressiona valuation e refinanciamento.'
+    ])
     imp_colors = {'MUITO ALTO': RED_NEG, 'ALTO': ORANGE, 'MÉDIO': GOLD, 'BAIXO': GREEN_POS}
     prob_colors = {'ALTA': RED_NEG, 'MÉDIA': ORANGE, 'BAIXA': GREEN_POS}
     r_d = [r_hdr]
@@ -791,12 +904,12 @@ def gerar_pdf(dfp, fre, macro):
                           textColor=colors.white, leading=16))],
         [P(
             f"Mantemos a recomendação de <b>{macro.get('recomendacao','MANTER')}</b> exposição seletiva a bonds curtos e médios de {macro.get('empresa_nome','Empresa')} "
-            f'(vencimentos 2026-2028), com spread alvo de {spread_min}-{spread_max} bps sobre Treasuries '
-            f'(yield alvo ~{yield_alvo:.2f}% USD, com Treasury 10Y em {t10y:.2f}%). '
-            f'EBITDA recorde de R$ {eb/1000:.1f}bi demonstra qualidade operacional. '
-            f'Caixa de R$ {caixa/1000:.1f}bi cobre 100%+ da dívida CP. '
-            f'Mineração (margem 41%) e logística (margem 44%) são âncoras de geração de caixa. '
-            f'Recovery estimado superior a 100% em cenário de liquidação (ativos > passivos).',
+            f'com spread alvo de {spread_min}-{spread_max} bps'
+            + (f' sobre Treasuries (yield alvo ~{yield_alvo:.2f}% USD, Treasury 10Y {t10y:.2f}%).' if t10y > 0 else '.')
+            + (f' EBITDA Ajustado de R$ {eb/1000:.1f}bi.' if eb > 0 else '')
+            + (f' Margem EBITDA: {mg_eb:.1f}%.' if mg_eb > 0 else '')
+            + (f' Caixa de R$ {caixa/1000:.1f}bi' + (f' cobre {caixa/venc_2026*100:.0f}% do vencimento CP.' if venc_2026 > 0 else '.') if caixa > 0 else '')
+            + (f' Alavancagem: {dl/eb:.2f}x DL/EBITDA.' if eb > 0 and dl > 0 else ''),
             ParagraphStyle('rb', fontName='Helvetica', fontSize=8.5,
                            textColor=GRAY_DARK, leading=13, alignment=TA_JUSTIFY))
         ],
@@ -817,14 +930,34 @@ def gerar_pdf(dfp, fre, macro):
     # Gatilhos
     story.append(P('7.1 Gatilhos de Revisão', s['ssh']))
     gt_hdr = [P('Direção', s['th']), P('Gatilho', s['th']), P('Métrica', s['th']), P('Monitoramento', s['th'])]
+    _alav_tg = round(max(2.0, (dl/eb if eb > 0 else 3.5) - 0.5), 1) if eb > 0 else 3.0
+    _caixa_min = round(caixa * 0.6 / 1000, 1) if caixa > 0 else 5.0
+    _fco_tg = round(max(0, eb * 0.15) / 1000, 1) if eb > 0 else 1.0
+    _setor_gt = macro.get('setor','')
     gt_rows = [
-        ['⬆ UPGRADE (Compra)', 'Desinvestimentos acima de R$8bi confirmados + DL/EBITDA abaixo de 3,0x', 'DL/EBITDA abaixo 3,0x', 'Relatório de resultados ITR'],
-        ['⬆ UPGRADE (Compra)', 'FCO acima de R$3bi por dois trimestres consecutivos', 'FCO trimestral', 'ITR / DFC'],
-        ['⬇ DOWNGRADE (Venda)', 'Fracasso ou atraso nos desinvestimentos (sem anúncio até dez/2026)', 'Comunicados CVM', 'Fatos relevantes'],
-        ['⬇ DOWNGRADE (Venda)', f'Minério Fe abaixo de US$85/t por dois trimestres (atual US${minerio:.0f}/t)', 'Preço spot Fe 62%', 'Diário (Bloomberg/SGX)'],
-        ['⬇ DOWNGRADE (Venda)', f'Caixa abaixo de R$10bi (atual R${caixa/1000:.1f}bi)', 'Caixa gerencial', 'ITR trimestral'],
-        ['⬇ DOWNGRADE (Venda)', 'Refinanciamento 2026 a custo acima de 9,5% USD', 'Anúncio de emissão', 'Prospecto / EMTN'],
+        ['⬆ UPGRADE', f'DL/EBITDA abaixo de {_alav_tg}x por dois trimestres consecutivos',
+         'DL/EBITDA', 'Resultados trimestrais (ITR)'],
+        ['⬆ UPGRADE', f'FCO acima de R$ {_fco_tg:.1f}bi por dois trimestres',
+         'FCO trimestral', 'ITR / DFC'],
+        ['⬇ DOWNGRADE', f'Deterioração de EBITDA acima de 15% sem perspectiva de recuperação',
+         'EBITDA / Margem', 'Resultados trimestrais'],
+        ['⬇ DOWNGRADE', f'Caixa abaixo de R$ {_caixa_min:.1f}bi (atual R$ {caixa/1000:.1f}bi)',
+         'Caixa gerencial', 'ITR trimestral'],
+        ['⬇ DOWNGRADE', f'Alavancagem acima de {round((dl/eb if eb > 0 else 4.0)+0.5,1)}x por dois trimestres',
+         'DL/EBITDA', 'Resultados trimestrais'],
+        ['⬇ DOWNGRADE', f'Selic acima de {selic+2:.2f}% por mais de dois trimestres',
+         'Política monetária', 'COPOM / Focus'],
     ]
+    # Adicionar gatilho setorial
+    if _setor_gt in ('mineracao','siderurgia'):
+        gt_rows.insert(2, ['⬇ DOWNGRADE', f'Commodity principal abaixo de -15% por dois trimestres',
+            'Preço spot commodity', 'Diário (Bloomberg/SGX)'])
+    elif _setor_gt == 'saude':
+        gt_rows.insert(2, ['⬇ DOWNGRADE', 'Sinistralidade acima de 85% por dois trimestres',
+            'Sinistralidade', 'Resultados trimestrais'])
+    elif _setor_gt == 'bancos':
+        gt_rows.insert(2, ['⬇ DOWNGRADE', 'Inadimplência >90d acima de 6%',
+            'NPL', 'Nota de resultado'])
     gt_rc = [('BACKGROUND',(0,i+1),(-1,i+1), HexColor('#DCFCE7') if '⬆' in r[0] else HexColor('#FEE2E2')) for i,r in enumerate(gt_rows)]
     gt_d = [gt_hdr] + [[P(r[0], ParagraphStyle('g', fontName='Helvetica-Bold', fontSize=7.5,
                 textColor=GREEN_POS if '⬆' in r[0] else RED_NEG, leading=10, alignment=TA_LEFT)),
@@ -1148,11 +1281,551 @@ def generate():
     macro.setdefault('spread_alvo', 425)
     try:
         pdf_bytes = gerar_pdf(dfp_data, fre_data, macro)
+        _salvar_relatorio(pdf_bytes, macro)
         return send_file(io.BytesIO(pdf_bytes), mimetype='application/pdf',
                          as_attachment=True, download_name=f"{macro.get('empresa_ticker','Empresa').replace(' ','_')}_Analise_Credito.pdf")
     except Exception as e:
         import traceback
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+
+
+import os, json, hashlib
+from datetime import datetime
+
+# ── Cache e storage de relatórios ─────────────────────────────────
+REPORTS_DIR = os.path.join(os.path.dirname(__file__), 'reports_history')
+os.makedirs(REPORTS_DIR, exist_ok=True)
+
+# ══════════════════════════════════════════════════════════════════
+# MAPA DE PEERS POR SETOR
+# ══════════════════════════════════════════════════════════════════
+PEERS_MAP = {
+    'mineracao':  ['VALE3','CMIN3','CSNA3'],
+    'siderurgia': ['CSNA3','GGBR4','USIM5','GCPG3'],
+    'petroleo':   ['PETR4','PETR3','PRIO3','RECV3','RRRP3','CSAN3'],
+    'varejo':     ['MGLU3','LREN3','AMER3','PCAR3','CRFB3','SOMA3'],
+    'saude':      ['HAPV3','RDRD3','FLRY3','DASA3','PNVL3','ONCO3'],
+    'agro':       ['SLCE3','SMTO3','JALL3','MRFG3','BEEF3','CAML3'],
+    'bancos':     ['ITUB4','BBDC4','BBAS3','SANB11','BRSR6','BPAC11'],
+    'telecom':    ['VIVT3','TIMS3','OIBR3'],
+    'energia':    ['EGIE3','CPFE3','ENGI11','CMIG4','ENBR3','TAEE11'],
+    'logistica':  ['RAIL3','ECOR3','TGMA3','VLID3'],
+    'imobiliario':['CYRE3','MRVE3','EZTC3','TEND3','DIRR3'],
+    'papel':      ['SUZB3','KLBN11','DXCO3'],
+    'alimentos':  ['ABEV3','BRFS3','JBSS3','MDIA3'],
+    'educacao':   ['COGN3','YDUQ3','ANIM3'],
+    'seguros':    ['BBSE3','SULA11','PSSA3'],
+}
+
+def _setor_do_texto(texto, ticker=''):
+    t = (texto or '').lower()
+    tk = (ticker or '').upper()
+    if 'miner' in t or 'ferro' in t or tk in ['VALE3','CMIN3']: return 'mineracao'
+    if 'sider' in t or 'aço' in t or tk in ['CSNA3','GGBR4','USIM5']: return 'siderurgia'
+    if 'petro' in t or 'óleo' in t or 'gás' in t or tk in ['PETR4','PETR3','PRIO3']: return 'petroleo'
+    if 'varejo' in t or 'comércio' in t or tk in ['MGLU3','LREN3','AMER3']: return 'varejo'
+    if 'saúde' in t or 'saude' in t or 'hospital' in t or tk in ['HAPV3','RDRD3','FLRY3']: return 'saude'
+    if 'agro' in t or 'soja' in t or 'carne' in t or tk in ['SLCE3','SMTO3','JALL3']: return 'agro'
+    if 'banco' in t or 'financ' in t or tk in ['ITUB4','BBDC4','BBAS3','SANB11']: return 'bancos'
+    if 'telecom' in t or 'celular' in t or tk in ['VIVT3','TIMS3']: return 'telecom'
+    if 'energia' in t or 'elétric' in t or tk in ['EGIE3','CPFE3','CMIG4']: return 'energia'
+    if 'logíst' in t or 'ferrovi' in t or tk in ['RAIL3','ECOR3']: return 'logistica'
+    if 'papel' in t or 'celulose' in t or tk in ['SUZB3','KLBN11']: return 'papel'
+    if 'alimento' in t or 'carne' in t or tk in ['ABEV3','BRFS3','JBSS3']: return 'alimentos'
+    if 'educ' in t or tk in ['COGN3','YDUQ3']: return 'educacao'
+    if 'seguro' in t or tk in ['BBSE3','SULA11']: return 'seguros'
+    return None
+
+# ══════════════════════════════════════════════════════════════════
+# SCORECARD DE RATING POR SETOR
+# ══════════════════════════════════════════════════════════════════
+SCORECARD_PESOS = {
+    'default': {
+        'alavancagem':     {'peso': 0.30, 'desc': 'DL/EBITDA'},
+        'icj':             {'peso': 0.20, 'desc': 'ICJ (EBITDA/Juros)'},
+        'liquidez':        {'peso': 0.15, 'desc': 'Caixa/Dívida CP'},
+        'margem':          {'peso': 0.15, 'desc': 'Margem EBITDA'},
+        'fco':             {'peso': 0.10, 'desc': 'FCO/Receita'},
+        'escala':          {'peso': 0.10, 'desc': 'Escala (Receita)'},
+    },
+    'bancos': {
+        'basileia':        {'peso': 0.30, 'desc': 'Basileia Tier 1'},
+        'inadimplencia':   {'peso': 0.25, 'desc': 'Inadimplência >90d'},
+        'nim':             {'peso': 0.20, 'desc': 'NIM'},
+        'eficiencia':      {'peso': 0.15, 'desc': 'Índice de Eficiência'},
+        'liquidez':        {'peso': 0.10, 'desc': 'LCR'},
+    },
+    'energia': {
+        'alavancagem':     {'peso': 0.25, 'desc': 'DL/EBITDA'},
+        'icj':             {'peso': 0.20, 'desc': 'ICJ'},
+        'contrato':        {'peso': 0.25, 'desc': '% Receita Contratada'},
+        'liquidez':        {'peso': 0.15, 'desc': 'Liquidez'},
+        'margem':          {'peso': 0.15, 'desc': 'Margem EBITDA'},
+    },
+}
+
+def calcular_scorecard(dfp_data, setor):
+    """Calcula score de crédito 0-10 baseado nos indicadores."""
+    eb  = dfp_data.get('ebitda_ajustado') or 0
+    dl  = dfp_data.get('divida_liquida') or 0
+    rl  = dfp_data.get('receita_liquida') or 0
+    cx  = dfp_data.get('caixa') or 0
+    jur = dfp_data.get('juros_pagos') or 0
+    fco = dfp_data.get('fco') or 0
+    dcp = dfp_data.get('divida_cp') or dfp_data.get('dcp') or 0
+
+    alav = dl/eb if eb > 0 else 99
+    icj  = eb/jur if jur > 0 else 0
+    liq  = cx/dcp if dcp > 0 else (2 if cx > 0 else 0)
+    mg   = eb/rl*100 if rl > 0 else 0
+    fco_r = fco/rl*100 if rl > 0 else 0
+
+    def score_alav(x):
+        if x <= 1: return 10
+        if x <= 1.5: return 9
+        if x <= 2: return 8
+        if x <= 2.5: return 7
+        if x <= 3: return 6
+        if x <= 3.5: return 5
+        if x <= 4: return 4
+        if x <= 5: return 3
+        if x <= 6: return 2
+        return 1
+
+    def score_icj(x):
+        if x >= 6: return 10
+        if x >= 4: return 8
+        if x >= 3: return 7
+        if x >= 2: return 6
+        if x >= 1.5: return 5
+        if x >= 1: return 4
+        return 2
+
+    def score_liq(x):
+        if x >= 2: return 10
+        if x >= 1.5: return 8
+        if x >= 1: return 6
+        if x >= 0.75: return 4
+        return 2
+
+    def score_mg(x):
+        if x >= 35: return 10
+        if x >= 25: return 8
+        if x >= 20: return 7
+        if x >= 15: return 6
+        if x >= 10: return 5
+        if x >= 5: return 3
+        return 1
+
+    def score_fco(x):
+        if x >= 15: return 10
+        if x >= 10: return 8
+        if x >= 5: return 6
+        if x >= 0: return 4
+        return 2
+
+    def score_escala(r):
+        if r >= 50000: return 10
+        if r >= 20000: return 8
+        if r >= 10000: return 7
+        if r >= 5000: return 6
+        if r >= 2000: return 5
+        if r >= 500: return 4
+        return 3
+
+    scores = {
+        'alavancagem': score_alav(alav),
+        'icj':         score_icj(icj),
+        'liquidez':    score_liq(liq),
+        'margem':      score_mg(mg),
+        'fco':         score_fco(fco_r),
+        'escala':      score_escala(rl),
+    }
+    pesos = SCORECARD_PESOS.get(setor, SCORECARD_PESOS['default'])
+    total_peso = sum(p['peso'] for p in pesos.values())
+    score_final = 0
+    detalhes = []
+    for k, cfg in pesos.items():
+        s = scores.get(k, 5)
+        contrib = s * cfg['peso']
+        score_final += contrib
+        detalhes.append({
+            'fator': cfg['desc'],
+            'score': round(s, 1),
+            'peso': f"{cfg['peso']*100:.0f}%",
+            'contribuicao': round(contrib, 2),
+        })
+
+    score_final = min(10, max(1, score_final / total_peso * total_peso))
+
+    # Mapear score para rating
+    def score_to_rating(s):
+        if s >= 9.5: return ('brAAA', 'Aaa/AAA', 'IG Alto')
+        if s >= 8.5: return ('brAA', 'Aa2/AA', 'IG Alto')
+        if s >= 7.5: return ('brA+', 'A1/A+', 'IG Médio')
+        if s >= 6.5: return ('brA-', 'Baa1/BBB+', 'IG Médio')
+        if s >= 5.5: return ('brBBB', 'Baa3/BBB-', 'IG Baixo')
+        if s >= 4.5: return ('brBB+', 'Ba1/BB+', 'HY Alto')
+        if s >= 3.5: return ('brBB', 'Ba2/BB', 'HY Médio')
+        if s >= 2.5: return ('brB+', 'B1/B+', 'HY Baixo')
+        if s >= 1.5: return ('brB-', 'B3/B-', 'Especulativo')
+        return ('brCCC', 'Caa1/CCC', 'Distressed')
+
+    br, gl, cat = score_to_rating(score_final)
+    return {
+        'score': round(score_final, 2),
+        'rating_br': br,
+        'rating_global': gl,
+        'categoria': cat,
+        'detalhes': detalhes,
+        'inputs': {
+            'alavancagem': round(alav, 2) if alav < 99 else None,
+            'icj': round(icj, 2),
+            'liquidez': round(liq, 2),
+            'margem_ebitda': round(mg, 1),
+            'fco_receita': round(fco_r, 1),
+        }
+    }
+
+# ══════════════════════════════════════════════════════════════════
+# ALTMAN Z-SCORE (versão mercados emergentes)
+# ══════════════════════════════════════════════════════════════════
+def calcular_zscore(dfp_data, market_cap_bi=None):
+    """Altman Z-Score adaptado para mercados emergentes (Z\'').
+    Z'' = 6.56*X1 + 3.26*X2 + 6.72*X3 + 1.05*X4
+    Zonas: >2.6 seguro, 1.1-2.6 cinza, <1.1 distress
+    """
+    try:
+        at  = (dfp_data.get('ativo_total') or 0)
+        ac  = (dfp_data.get('ativo_circulante') or dfp_data.get('caixa') or 0)
+        pc  = (dfp_data.get('passivo_circulante') or dfp_data.get('divida_cp') or 0)
+        laj = (dfp_data.get('ebitda_ajustado') or 0)
+        ll  = (dfp_data.get('lucros_retidos') or dfp_data.get('lucro_liquido') or 0)
+        pl  = (dfp_data.get('patrimonio_liquido') or 0)
+        dt  = (dfp_data.get('divida_bruta') or 0)
+        rl  = (dfp_data.get('receita_liquida') or 0)
+
+        if at <= 0: return None
+
+        X1 = (ac - pc) / at        # Capital de giro / Ativo total
+        X2 = ll / at               # Lucros retidos / Ativo total
+        X3 = laj / at              # LAJIR / Ativo total
+        X4 = pl / dt if dt > 0 else 1  # PL / Dívida total
+
+        Z = 6.56*X1 + 3.26*X2 + 6.72*X3 + 1.05*X4
+
+        if Z > 2.6: zona = 'segura'
+        elif Z > 1.1: zona = 'cinza'
+        else: zona = 'distress'
+
+        return {
+            'z_score': round(Z, 3),
+            'zona': zona,
+            'zona_desc': {
+                'segura': 'Zona Segura (Z > 2,6) — baixo risco de default',
+                'cinza': 'Zona Cinza (1,1 < Z < 2,6) — risco moderado, monitorar',
+                'distress': 'Zona de Distress (Z < 1,1) — alto risco de insolvência',
+            }[zona],
+            'componentes': {
+                'X1_capital_giro': round(X1, 4),
+                'X2_lucros_retidos': round(X2, 4),
+                'X3_rentabilidade': round(X3, 4),
+                'X4_solvencia': round(X4, 4),
+            }
+        }
+    except:
+        return None
+
+# ══════════════════════════════════════════════════════════════════
+# ROTA: /api/peers/<ticker>
+# ══════════════════════════════════════════════════════════════════
+@app.route('/api/peers/<ticker>')
+def get_peers(ticker):
+    """Busca peers do mesmo setor e retorna dados comparativos via Brapi."""
+    import requests as rq
+    BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+    tk = ticker.upper()
+    # Detectar setor
+    setor = None
+    for s, tickers in PEERS_MAP.items():
+        if tk in tickers:
+            setor = s
+            break
+    if not setor:
+        # Tentar via query string
+        setor = request.args.get('setor', '')
+
+    peers = list(set(PEERS_MAP.get(setor, []) + [tk]))[:6]
+
+    resultado = {'ticker': tk, 'setor': setor, 'peers': []}
+    tickers_str = ','.join(peers)
+    try:
+        r = rq.get(f'https://brapi.dev/api/quote/{tickers_str}',
+                   params={'token': BRAPI_TOKEN,
+                           'modules': 'defaultKeyStatistics,financialData'},
+                   timeout=12)
+        if r.status_code == 200:
+            for q in r.json().get('results', []):
+                resultado['peers'].append({
+                    'ticker': q.get('symbol',''),
+                    'nome': q.get('shortName',''),
+                    'cotacao': q.get('regularMarketPrice'),
+                    'variacao': q.get('regularMarketChangePercent'),
+                    'market_cap_bi': round(q.get('marketCap',0)/1e9, 2) if q.get('marketCap') else None,
+                    'pl': q.get('trailingPE') or q.get('priceEarningsRatio'),
+                    'pvp': q.get('priceToBook'),
+                    'ev_ebitda': q.get('enterpriseToEbitda'),
+                    'dividend_yield': q.get('dividendYield'),
+                    'beta': q.get('beta'),
+                    'eh_principal': q.get('symbol','').upper() == tk,
+                })
+    except Exception as e:
+        resultado['erro'] = str(e)
+
+    return jsonify(resultado)
+
+# ══════════════════════════════════════════════════════════════════
+# ROTA: /api/scorecard
+# ══════════════════════════════════════════════════════════════════
+@app.route('/api/scorecard', methods=['POST'])
+def scorecard():
+    """Calcula scorecard de rating e Z-Score a partir dos dados financeiros."""
+    body = request.json or {}
+    dfp_data = body.get('dfp', {})
+    setor = body.get('setor', 'default')
+    market_cap_bi = body.get('market_cap_bi')
+
+    sc = calcular_scorecard(dfp_data, setor)
+    zs = calcular_zscore(dfp_data, market_cap_bi)
+
+    return jsonify({'scorecard': sc, 'zscore': zs})
+
+# ══════════════════════════════════════════════════════════════════
+# ROTA: /api/historico/<ticker>
+# ══════════════════════════════════════════════════════════════════
+@app.route('/api/historico/<ticker>')
+def historico_financeiro(ticker):
+    """Busca histórico financeiro trimestral via CVM (últimos 8 trimestres)."""
+    import requests as rq, io, zipfile, csv
+
+    tk = ticker.upper()
+    anos = [2023, 2024, 2025]
+    series = {}
+
+    try:
+        cvm = _load_cvm_cache()
+        # Encontrar cod_cvm pelo ticker
+        cod_cvm = None
+        for cnpj_raw, info in cvm.items():
+            if info.get('nome_pregao','').upper() in tk or tk in info.get('nome_pregao','').upper():
+                cod_cvm = info.get('cod_cvm')
+                break
+
+        if not cod_cvm:
+            # Tentar via Brapi — retornar série histórica simplificada
+            BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+            r = rq.get(f'https://brapi.dev/api/quote/{tk}',
+                       params={'token': BRAPI_TOKEN,
+                               'modules': 'incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory'},
+                       timeout=12)
+            if r.status_code == 200:
+                res = r.json().get('results', [{}])[0]
+                income = res.get('incomeStatementHistory', {}).get('incomeStatementHistory', [])
+                balance = res.get('balanceSheetHistory', {}).get('balanceSheetHistory', [])
+                series['fonte'] = 'brapi'
+                series['trimestres'] = []
+                for i, item in enumerate(income[:8]):
+                    dt = item.get('endDate', {}).get('fmt', f'T{i+1}')
+                    bal = balance[i] if i < len(balance) else {}
+                    series['trimestres'].append({
+                        'periodo': dt,
+                        'receita': item.get('totalRevenue', {}).get('raw'),
+                        'ebitda': item.get('ebitda', {}).get('raw'),
+                        'lucro': item.get('netIncome', {}).get('raw'),
+                        'divida_total': bal.get('longTermDebt', {}).get('raw'),
+                        'caixa': bal.get('cash', {}).get('raw'),
+                    })
+                return jsonify(series)
+
+        series['fonte'] = 'cvm'
+        series['cod_cvm'] = cod_cvm
+        series['trimestres'] = []
+        return jsonify(series)
+
+    except Exception as e:
+        return jsonify({'erro': str(e), 'trimestres': []})
+
+# ══════════════════════════════════════════════════════════════════
+# ROTA: /api/debentures/<identificador>
+# ══════════════════════════════════════════════════════════════════
+@app.route('/api/debentures/<identificador>')
+def buscar_debentures(identificador):
+    """Busca debêntures, CRAs e CRIs via debentures.com.br."""
+    import requests as rq
+    resultado = {'emissoes': [], 'fonte': 'debentures.com.br'}
+    try:
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+        # API pública da ANBIMA / Status Invest como alternativa
+        r = rq.get(
+            f'https://sistemasweb.b3.com.br/DebenturesToPublic/rest/debentures/emissao?search={identificador}',
+            headers=headers, timeout=10
+        )
+        if r.status_code == 200:
+            data = r.json() if r.headers.get('content-type','').startswith('application/json') else {}
+            emissoes = data.get('debentures', data.get('result', []))
+            for e in emissoes[:10]:
+                resultado['emissoes'].append({
+                    'codigo': e.get('codigoEmissao') or e.get('codigo',''),
+                    'emissor': e.get('nomeEmissor') or e.get('emissor',''),
+                    'tipo': e.get('tipoDebenture', 'Debênture'),
+                    'vencimento': e.get('dataVencimento') or e.get('vencimento',''),
+                    'taxa': e.get('taxaEmissao') or e.get('taxa',''),
+                    'volume': e.get('volumeTotal') or e.get('volume'),
+                    'rating': e.get('ratingEmissao') or e.get('rating',''),
+                    'indexador': e.get('indexador',''),
+                })
+        else:
+            # Fallback: Status Invest
+            r2 = rq.get(
+                f'https://statusinvest.com.br/debentures/GetDebentures',
+                params={'search': identificador, 'type': 0},
+                headers=headers, timeout=10
+            )
+            if r2.status_code == 200:
+                try:
+                    items = r2.json().get('list', [])
+                    for e in items[:10]:
+                        resultado['emissoes'].append({
+                            'codigo': e.get('code',''),
+                            'emissor': e.get('companyName',''),
+                            'tipo': e.get('type','Debênture'),
+                            'vencimento': e.get('maturityDate',''),
+                            'taxa': e.get('indexerDescription','') + (f" + {e.get('rate','')}" if e.get('rate') else ''),
+                            'volume': e.get('totalPapers'),
+                            'rating': e.get('rating',''),
+                            'indexador': e.get('indexer',''),
+                        })
+                    resultado['fonte'] = 'statusinvest'
+                except: pass
+    except Exception as e:
+        resultado['erro'] = str(e)
+    return jsonify(resultado)
+
+# ══════════════════════════════════════════════════════════════════
+# ROTA: /api/noticias/<ticker>
+# ══════════════════════════════════════════════════════════════════
+@app.route('/api/noticias/<ticker>')
+def get_noticias(ticker):
+    """Busca notícias recentes via Google News RSS."""
+    import urllib.request, urllib.parse
+    from xml.etree import ElementTree as ET
+
+    tk = ticker.upper()
+    resultado = {'ticker': tk, 'noticias': []}
+    queries = [tk, f'{tk} resultados', f'{tk} crédito']
+
+    try:
+        q = urllib.parse.quote(f'{tk} ações bolsa')
+        url = f'https://news.google.com/rss/search?q={q}&hl=pt-BR&gl=BR&ceid=BR:pt-419'
+        req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            xml = r.read()
+        root = ET.fromstring(xml)
+        items = root.findall('.//item')[:10]
+        for item in items:
+            titulo = item.findtext('title','')
+            link = item.findtext('link','')
+            pub = item.findtext('pubDate','')
+            fonte = item.findtext('source','')
+            resultado['noticias'].append({
+                'titulo': titulo,
+                'link': link,
+                'publicado': pub,
+                'fonte': fonte,
+            })
+    except Exception as e:
+        resultado['erro'] = str(e)
+
+    return jsonify(resultado)
+
+# ══════════════════════════════════════════════════════════════════
+# ROTA: /api/relatorios — histórico de relatórios gerados
+# ══════════════════════════════════════════════════════════════════
+@app.route('/api/relatorios', methods=['GET'])
+def listar_relatorios():
+    """Lista histórico de relatórios gerados."""
+    try:
+        meta_file = os.path.join(REPORTS_DIR, 'index.json')
+        if not os.path.exists(meta_file):
+            return jsonify({'relatorios': []})
+        with open(meta_file) as f:
+            data = json.load(f)
+        return jsonify({'relatorios': data.get('relatorios', [])})
+    except:
+        return jsonify({'relatorios': []})
+
+@app.route('/api/relatorios/<relatorio_id>', methods=['GET'])
+def baixar_relatorio(relatorio_id):
+    """Download de relatório salvo."""
+    try:
+        safe_id = ''.join(c for c in relatorio_id if c.isalnum() or c in '-_')
+        path = os.path.join(REPORTS_DIR, f'{safe_id}.pdf')
+        if not os.path.exists(path):
+            return jsonify({'error': 'Relatório não encontrado'}), 404
+        return send_file(path, mimetype='application/pdf', as_attachment=True,
+                        download_name=f'{safe_id}.pdf')
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/relatorios/<relatorio_id>', methods=['DELETE'])
+def deletar_relatorio(relatorio_id):
+    """Remove relatório do histórico."""
+    try:
+        safe_id = ''.join(c for c in relatorio_id if c.isalnum() or c in '-_')
+        meta_file = os.path.join(REPORTS_DIR, 'index.json')
+        with open(meta_file) as f:
+            data = json.load(f)
+        data['relatorios'] = [r for r in data.get('relatorios',[]) if r.get('id') != safe_id]
+        with open(meta_file,'w') as f:
+            json.dump(data, f)
+        pdf_path = os.path.join(REPORTS_DIR, f'{safe_id}.pdf')
+        if os.path.exists(pdf_path): os.remove(pdf_path)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+def _salvar_relatorio(pdf_bytes, macro):
+    """Salva PDF gerado no histórico."""
+    try:
+        ts = datetime.now().strftime('%Y%m%d_%H%M%S')
+        tk = macro.get('empresa_ticker','TICK').replace(' ','_').upper()
+        rel_id = f"{tk}_{ts}"
+        # Salvar PDF
+        pdf_path = os.path.join(REPORTS_DIR, f'{rel_id}.pdf')
+        with open(pdf_path, 'wb') as f:
+            f.write(pdf_bytes)
+        # Atualizar índice
+        meta_file = os.path.join(REPORTS_DIR, 'index.json')
+        data = {'relatorios': []}
+        if os.path.exists(meta_file):
+            with open(meta_file) as f:
+                data = json.load(f)
+        data['relatorios'].insert(0, {
+            'id': rel_id,
+            'ticker': macro.get('empresa_ticker',''),
+            'empresa': macro.get('empresa_nome',''),
+            'data': datetime.now().strftime('%d/%m/%Y %H:%M'),
+            'recomendacao': macro.get('recomendacao',''),
+            'rating_br': macro.get('rating_br',''),
+            'rating_gl': macro.get('rating',''),
+            'tamanho_kb': round(len(pdf_bytes)/1024, 1),
+        })
+        # Manter só os últimos 50
+        data['relatorios'] = data['relatorios'][:50]
+        with open(meta_file,'w') as f:
+            json.dump(data, f, ensure_ascii=False)
+    except:
+        pass
 
 if __name__ == '__main__':
     print('\n🚀  Dashboard Análise de Crédito → http://localhost:5000\n')
