@@ -114,14 +114,7 @@ def parse_dfp(text):
     d['juros_pagos'] = fv(text, [r'[Jj]uros\s+(?:pagos|incorridos)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
     d['resultado_fin_bruto'] = fv(text, [r'[Dd]espesas?\s+[Ff]inanceiras[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
 
-    # Segmentos
-    d['receita_siderurgia'] = 22026; d['ebitda_siderurgia'] = 2194
-    d['receita_mineracao']  = 15401; d['ebitda_mineracao']  = 6309
-    d['receita_cimentos']   = 4906;  d['ebitda_cimentos']   = 1290
-    d['receita_logistica']  = 4374;  d['ebitda_logistica']  = 1933
-    d['receita_energia']    = 682;   d['ebitda_energia']    = 255
-    d['volume_mineracao_mt']= 45.849
-    d['volume_siderurgia_kt']= 4210
+    d['volume_mineracao_mt'] = 0
     return d
 
 def parse_fre(text):
@@ -252,8 +245,8 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.drawString(ML, PAGE_H*0.90, f"ANÁLISE DE CRÉDITO — {macro.get('empresa_ticker','').upper()}")
     canvas.setFillColor(colors.white)
     canvas.setFont('Helvetica-Bold', 26)
-    canvas.drawString(ML, PAGE_H*0.82, macro.get('empresa_nome','Empresa')[:28])
-    canvas.drawString(ML, PAGE_H*0.76, macro.get('empresa_nome','Empresa'))
+    canvas.setFont('Helvetica-Bold', 22)
+    canvas.drawString(ML, PAGE_H*0.80, macro.get('empresa_nome','Empresa')[:40])
     canvas.setFont('Helvetica', 9)
     canvas.setFillColor(HexColor('#7DD3FC'))
     canvas.drawString(ML, PAGE_H*0.71, f"{macro.get('empresa_ticker','TICK3')}  ·  B3   |   {macro.get('empresa_segmentos','Segmentos da empresa')}")
@@ -300,18 +293,19 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.setFont('Helvetica', 7)
     canvas.drawCentredString(ML+374, by+31, 'SPREAD ALVO (bps)')
     canvas.setFont('Helvetica-Bold', 16)
-    canvas.drawCentredString(ML+374, by+16, '400–450 bps')
+    canvas.drawCentredString(ML+374, by+16, f"{macro.get('spread_alvo',425)} bps")
     canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+374, by+6, f'Yield ~{macro["treasury_10y"]+4.25:.2f}% USD')
+    _spd = macro.get('spread_alvo',425)
+    canvas.drawCentredString(ML+374, by+6, f'Yield ~{macro["treasury_10y"]+_spd/100:.2f}% USD')
 
     # ── KPI strip
     kpis = [
-        (f"R$ {dfp.get('receita_liquida',44798)/1000:.1f}bi", 'Receita Líquida', GREEN_POS),
-        (f"R$ {dfp.get('ebitda_ajustado',11796)/1000:.1f}bi", 'EBITDA Ajustado', GREEN_POS),
-        (f"{dfp.get('margem_ebitda',25.1):.1f}%", 'Margem EBITDA Aj.', GREEN_POS),
-        (f"R$ {dfp.get('divida_liquida',41218)/1000:.1f}bi", 'Dívida Líquida', ORANGE),
-        (f"R$ {dfp.get('caixa',16000)/1000:.1f}bi", 'Caixa Gerencial', STEEL),
-        (f"R$ {abs(dfp.get('lucro_liquido',-1507))/1000:.1f}bi", 'Prejuízo Líquido', RED_NEG),
+        (f"R$ {dfp.get('receita_liquida',0)/1000:.1f}bi" if dfp.get('receita_liquida') else '—', 'Receita Líquida', GREEN_POS),
+        (f"R$ {dfp.get('ebitda_ajustado',0)/1000:.1f}bi" if dfp.get('ebitda_ajustado') else '—', 'EBITDA Ajustado', GREEN_POS),
+        (f"{dfp.get('margem_ebitda',0):.1f}%" if dfp.get('margem_ebitda') else '—', 'Margem EBITDA Aj.', GREEN_POS),
+        (f"R$ {dfp.get('divida_liquida',0)/1000:.1f}bi" if dfp.get('divida_liquida') else '—', 'Dívida Líquida', ORANGE),
+        (f"R$ {dfp.get('caixa',0)/1000:.1f}bi" if dfp.get('caixa') else '—', 'Caixa Gerencial', STEEL),
+        (f"R$ {abs(dfp.get('lucro_liquido',0))/1000:.1f}bi" if dfp.get('lucro_liquido') else '—', 'Resultado Líquido', RED_NEG),
     ]
     kpi_y = PAGE_H*0.35
     kw = (PAGE_W - ML - MR - 5) / 6
@@ -339,27 +333,32 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.drawString(ML, PAGE_H*0.31, '▌ TESE EM RESUMO')
     canvas.setFillColor(GRAY_DARK)
     canvas.setFont('Helvetica', 7.8)
-    ebitda = dfp.get('ebitda_ajustado', 11796)
+    ebitda = dfp.get('ebitda_ajustado') or 0
     caixa = dfp.get('caixa', 16000)
-    venc_2026 = fre.get('vencimentos', {}).get('2026', 10523)
+    venc_2026 = fre.get('vencimentos', {}).get('2026') or 0
     tese_usuario = macro.get('tese_resumo','')
+    _nm = macro.get("empresa_nome","A empresa")
     resumo = tese_usuario if tese_usuario else (
-        f"CSN encerra 2025 com EBITDA Ajustado recorde de R$ {ebitda/1000:.1f}bi (+15,3% a/a; margem {dfp.get('margem_ebitda',25.1):.1f}%). "
-        f"Alavancagem {alav:.2f}x acima do target 2,5x. FCO negativo R$ 0,97bi. "
-        f"Caixa de R$ {caixa/1000:.1f}bi cobre {caixa/venc_2026*100:.0f}% dos vencimentos de curto prazo (R$ {venc_2026/1000:.1f}bi). "
-        f"Plano de desinvestimentos R$ 15-18bi (jan/2026) é o catalisador central para desalavancagem. "
-        f"Com premissas macro: Selic {macro['selic']:.2f}%, minério US$ {macro['minerio_fe']:.0f}/t, USD/BRL R$ {macro['usd_brl']:.2f}."
+        f"{_nm} — análise de crédito baseada nos documentos enviados."
+        + (f" EBITDA Ajustado: R$ {ebitda/1000:.1f}bi." if ebitda else "")
+        + (f" Alavancagem: {alav:.2f}x DL/EBITDA." if alav else "")
+        + (f" Caixa: R$ {caixa/1000:.1f}bi." if caixa else "")
+        + f" Selic {macro['selic']:.2f}%, USD/BRL R$ {macro['usd_brl']:.2f}."
     )
     words = resumo.split()
     line, y = '', PAGE_H*0.285
     max_w = PAGE_W - ML - MR
+    min_y = PAGE_H*0.235  # não ultrapassar área de premissas
     for w in words:
         test = (line + ' ' + w).strip()
         if canvas.stringWidth(test, 'Helvetica', 7.8) < max_w:
             line = test
         else:
-            canvas.drawString(ML, y, line); y -= 10; line = w
-    if line: canvas.drawString(ML, y, line)
+            if y > min_y:
+                canvas.drawString(ML, y, line)
+            y -= 10; line = w
+    if line and y > min_y:
+        canvas.drawString(ML, y, line)
 
     # Linha separadora
     canvas.setStrokeColor(GRAY_LIGHT)
@@ -370,15 +369,17 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.setFillColor(NAVY)
     canvas.setFont('Helvetica-Bold', 7.5)
     canvas.drawString(ML, PAGE_H*0.21, 'PREMISSAS MACROECONÔMICAS UTILIZADAS NESTE RELATÓRIO')
+    _setor_m = macro.get('setor','')
     macros_txt = [
         f"USD/BRL: R$ {macro['usd_brl']:.2f}",
         f"Selic: {macro['selic']:.2f}% a.a.",
         f"IPCA: {macro['ipca']:.2f}% a.a.",
         f"CDI: {macro['cdi']:.2f}% a.a.",
-        f"Minério Fe 62%: US$ {macro['minerio_fe']:.0f}/t",
-        f"HRC: US$ {macro['hrc']:.0f}/t",
         f"Treasury 10Y: {macro['treasury_10y']:.2f}%",
+        f"Spread Alvo: {macro.get('spread_alvo',425)} bps",
     ]
+    if _setor_m in ('mineracao','siderurgia'):
+        macros_txt.insert(4, f"Minério Fe: US$ {macro.get('minerio_fe',102):.0f}/t")
     mx, my = ML, PAGE_H*0.19
     canvas.setFillColor(GRAY_DARK)
     canvas.setFont('Helvetica', 7.5)
@@ -403,21 +404,21 @@ def gerar_pdf(dfp, fre, macro):
     s = build_styles()
 
     # Vars comuns
-    rl    = dfp.get('receita_liquida', 44798)
-    eb    = dfp.get('ebitda_ajustado', 11796)
-    mg_eb = dfp.get('margem_ebitda', 25.1)
-    ll    = dfp.get('lucro_liquido', -1507)
-    alav  = dfp.get('alavancagem', 3.47)
-    dl    = dfp.get('divida_liquida', 41218)
-    caixa = dfp.get('caixa', 16000)
-    fco   = dfp.get('fco', -973)
-    capex = dfp.get('capex', 5936)
-    db    = fre.get('divida_bruta', 52924)
-    venc  = fre.get('vencimentos', {})
-    venc_2026 = venc.get('2026', 10523)
-    juros = dfp.get('juros_pagos', 4268)
-    rf    = dfp.get('resultado_financeiro', -6496)
-    icj   = eb / juros if juros else 0
+    rl    = dfp.get('receita_liquida') or 0
+    eb    = dfp.get('ebitda_ajustado') or 0
+    mg_eb = dfp.get('margem_ebitda') or (round(eb/rl*100,1) if rl else 0)
+    ll    = dfp.get('lucro_liquido') or 0
+    alav  = dfp.get('alavancagem') or (round(dl/eb,2) if eb else 0)
+    dl    = dfp.get('divida_liquida') or 0
+    caixa = dfp.get('caixa') or 0
+    fco   = dfp.get('fco') or 0
+    capex = dfp.get('capex') or 0
+    db    = fre.get('divida_bruta') or 0
+    venc  = fre.get('vencimentos') or {}
+    venc_2026 = venc.get('2026') or 0
+    juros = dfp.get('juros_pagos') or 0
+    rf    = dfp.get('resultado_financeiro') or 0
+    icj   = round(eb/juros, 2) if juros else 0
 
     # Parâmetros macro
     selic     = macro.get('selic', 14.75)
@@ -847,61 +848,210 @@ def gerar_pdf(dfp, fre, macro):
 
 # ─── ROTAS ─────────────────────────────────────────────────────────────────────
 
+# ── Cache CVM carregado uma vez por sessão ──────────────────────────
+_cvm_cache = {}
+
+def _load_cvm_cache():
+    """Carrega cadastro CVM em memória (CNPJ → ticker, cod_cvm, segmento)."""
+    global _cvm_cache
+    if _cvm_cache:
+        return _cvm_cache
+    try:
+        import requests as rq
+        import io as _io
+        import csv
+        r = rq.get('https://dados.cvm.gov.br/dados/CIA_ABERTA/CAD/DADOS/cad_cia_aberta.csv',
+                   timeout=15, headers={'User-Agent':'Mozilla/5.0'})
+        if r.status_code == 200:
+            reader = csv.DictReader(_io.StringIO(r.content.decode('latin-1')), delimiter=';')
+            for row in reader:
+                cnpj_raw = ''.join(filter(str.isdigit, row.get('CNPJ_CIA','')))
+                if cnpj_raw:
+                    _cvm_cache[cnpj_raw] = {
+                        'cod_cvm': row.get('CD_CVM',''),
+                        'nome_cvm': row.get('DENOM_SOCIAL',''),
+                        'nome_pregao': row.get('DENOM_COMERC',''),
+                        'segmento': row.get('SEGM',''),
+                        'categoria': row.get('CATEG_REG',''),
+                        'situacao_cvm': row.get('SIT',''),
+                    }
+    except Exception as e:
+        pass
+    return _cvm_cache
+
+def _buscar_ticker_brapi(nome_pregao, nome_social, cod_cvm):
+    """Tenta encontrar ticker via Brapi pelo nome de pregão ou CVM."""
+    BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+    try:
+        import requests as rq
+        # Busca por nome no Brapi
+        termos = [t for t in [nome_pregao, nome_social[:15] if nome_social else ''] if t]
+        for termo in termos:
+            r = rq.get(f'https://brapi.dev/api/quote/list',
+                       params={'search': termo, 'token': BRAPI_TOKEN},
+                       timeout=8)
+            if r.status_code == 200:
+                stocks = r.json().get('stocks', [])
+                if stocks:
+                    # Preferir ações ON (3) ou PN (4) ou UNT (11)
+                    for sufixo in ['3','4','11','5','6']:
+                        for s in stocks:
+                            if s.get('stock','').endswith(sufixo):
+                                return s['stock']
+                    return stocks[0].get('stock','')
+    except:
+        pass
+    return ''
+
+def _buscar_dados_brapi(ticker):
+    """Busca cotação e múltiplos via Brapi para um ticker."""
+    if not ticker:
+        return {}
+    BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+    try:
+        import requests as rq
+        r = rq.get(f'https://brapi.dev/api/quote/{ticker}',
+                   params={'token': BRAPI_TOKEN, 'modules': 'summaryProfile,defaultKeyStatistics,financialData'},
+                   timeout=10)
+        if r.status_code != 200:
+            return {}
+        results = r.json().get('results', [])
+        if not results:
+            return {}
+        q = results[0]
+        return {
+            'cotacao': q.get('regularMarketPrice'),
+            'variacao_dia': q.get('regularMarketChangePercent'),
+            'market_cap': q.get('marketCap'),
+            'market_cap_bi': round(q.get('marketCap',0)/1e9, 2) if q.get('marketCap') else None,
+            'volume': q.get('regularMarketVolume'),
+            'pl': q.get('priceEarningsRatio') or q.get('trailingPE'),
+            'pvp': q.get('priceToBook'),
+            'ev_ebitda': q.get('enterpriseToEbitda'),
+            'dividend_yield': q.get('dividendYield'),
+            'beta': q.get('beta'),
+            'min_52s': q.get('fiftyTwoWeekLow'),
+            'max_52s': q.get('fiftyTwoWeekHigh'),
+            'nome_pregao': q.get('shortName') or q.get('longName',''),
+            'setor_brapi': q.get('sector',''),
+            'subsetor': q.get('industry',''),
+            'descricao': q.get('longBusinessSummary','')[:300] if q.get('longBusinessSummary') else '',
+            'funcionarios': q.get('fullTimeEmployees'),
+            'website': q.get('website',''),
+            'pais': q.get('country','Brasil'),
+            'moeda': q.get('currency','BRL'),
+        }
+    except Exception as e:
+        return {}
+
 @app.route('/api/cnpj/<cnpj>')
 def consultar_cnpj(cnpj):
-    """Consulta dados da empresa pelo CNPJ via BrasilAPI."""
+    """Pipeline completo: CNPJ → BrasilAPI + CVM + Brapi."""
     raw = ''.join(filter(str.isdigit, cnpj))
     if len(raw) != 14:
         return jsonify({'error': 'CNPJ inválido'}), 400
-    # Mapeamento CNPJ → Ticker B3 (principais empresas)
-    CNPJ_TICKER = {
-        '33592510000154': 'PETR4', '60872504000123': 'VALE3',
-        '60746948000112': 'ITUB4', '00000000000191': 'BBAS3',
-        '90400888000142': 'BBDC4', '92702067000196': 'GGBR4',
-        '33042730000104': 'CSNA3', '15527906000159': 'HAPV3',
-        '07206816000115': 'WEGE3', '07526557000100': 'RENT3',
+
+    import requests as rq
+
+    resultado = {
+        'cnpj': raw,
+        'razao_social': '',
+        'nome_fantasia': '',
+        'cnae': '',
+        'cnae_codigo': '',
+        'situacao': '',
+        'municipio': '',
+        'uf': '',
+        'capital_social': None,
+        'data_abertura': '',
+        'qsa': [],
+        # CVM
+        'cod_cvm': '',
+        'segmento_b3': '',
+        'categoria_cvm': '',
+        'situacao_cvm': '',
+        # Mercado
+        'ticker': '',
+        'cotacao': None,
+        'variacao_dia': None,
+        'market_cap_bi': None,
+        'pl': None,
+        'pvp': None,
+        'ev_ebitda': None,
+        'dividend_yield': None,
+        'beta': None,
+        'min_52s': None,
+        'max_52s': None,
+        'setor_brapi': '',
+        'subsetor': '',
+        'funcionarios': None,
+        'website': '',
+        'descricao': '',
     }
+
+    # ── 1. BrasilAPI (Receita Federal) ──────────────────────────────
     try:
-        import requests as req2
-        r = req2.get(f'https://brasilapi.com.br/api/cnpj/v1/{raw}',
-                     headers={'User-Agent': 'Mozilla/5.0'}, timeout=12)
-        if r.status_code != 200:
-            # fallback receitaws
-            r2 = req2.get(f'https://receitaws.com.br/v1/cnpj/{raw}',
-                          headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
-            d = r2.json()
-            return jsonify({
-                'razao_social': d.get('nome',''),
-                'nome_fantasia': d.get('fantasia',''),
-                'cnae': d.get('atividade_principal',[{}])[0].get('text','') if d.get('atividade_principal') else '',
-                'situacao': d.get('situacao',''),
-                'municipio': d.get('municipio',''),
-                'uf': d.get('uf',''),
-                'ticker': CNPJ_TICKER.get(raw, ''),
-                'qsa': [{'nome': s.get('nome',''), 'qualificacao': s.get('qual','')} for s in d.get('qsa', [])[:8]],
-                'setor_macro': d.get('atividade_principal',[{}])[0].get('text',''),
-            })
-        d = r.json()
-        # Detectar setor pelo CNAE
-        cnae_desc = ''
-        if d.get('cnae_fiscal_descricao'):
-            cnae_desc = d['cnae_fiscal_descricao']
-        elif d.get('cnaes_secundarios'):
-            cnae_desc = d['cnaes_secundarios'][0].get('descricao','')
-        return jsonify({
-            'razao_social': d.get('razao_social',''),
-            'nome_fantasia': d.get('nome_fantasia',''),
-            'cnae': cnae_desc,
-            'situacao': d.get('descricao_situacao_cadastral',''),
-            'municipio': d.get('municipio',''),
-            'uf': d.get('uf',''),
-            'capital_social': d.get('capital_social'),
-            'ticker': CNPJ_TICKER.get(raw, ''),
-            'qsa': [{'nome': s.get('nome_socio',''), 'qualificacao': s.get('qualificacao_socio','')} for s in d.get('qsa', [])[:8]],
-            'setor_macro': cnae_desc,
-        })
+        r = rq.get(f'https://brasilapi.com.br/api/cnpj/v1/{raw}',
+                   headers={'User-Agent':'Mozilla/5.0'}, timeout=12)
+        if r.status_code == 200:
+            d = r.json()
+            resultado['razao_social'] = d.get('razao_social','')
+            resultado['nome_fantasia'] = d.get('nome_fantasia','') or d.get('razao_social','')
+            cnae_desc = d.get('cnae_fiscal_descricao','')
+            if not cnae_desc and d.get('cnaes_secundarios'):
+                cnae_desc = d['cnaes_secundarios'][0].get('descricao','')
+            resultado['cnae'] = cnae_desc
+            resultado['cnae_codigo'] = str(d.get('cnae_fiscal',''))
+            resultado['situacao'] = d.get('descricao_situacao_cadastral','')
+            resultado['municipio'] = d.get('municipio','')
+            resultado['uf'] = d.get('uf','')
+            resultado['capital_social'] = d.get('capital_social')
+            resultado['data_abertura'] = d.get('data_inicio_atividade','')
+            qsa = d.get('qsa',[])
+            resultado['qsa'] = [{'nome': s.get('nome_socio',''), 'qualificacao': s.get('qualificacao_socio','')} for s in qsa[:10]]
+        else:
+            # Fallback ReceitaWS
+            r2 = rq.get(f'https://receitaws.com.br/v1/cnpj/{raw}',
+                        headers={'User-Agent':'Mozilla/5.0'}, timeout=10)
+            if r2.status_code == 200:
+                d2 = r2.json()
+                resultado['razao_social'] = d2.get('nome','')
+                resultado['nome_fantasia'] = d2.get('fantasia','') or d2.get('nome','')
+                ativ = d2.get('atividade_principal',[{}])
+                resultado['cnae'] = ativ[0].get('text','') if ativ else ''
+                resultado['situacao'] = d2.get('situacao','')
+                resultado['municipio'] = d2.get('municipio','')
+                resultado['uf'] = d2.get('uf','')
+                resultado['qsa'] = [{'nome': s.get('nome',''), 'qualificacao': s.get('qual','')} for s in d2.get('qsa',[])[:10]]
     except Exception as e:
-        return jsonify({'error': f'Não foi possível consultar: {str(e)}'}), 500
+        resultado['_erro_receita'] = str(e)
+
+    # ── 2. CVM — código, segmento B3, ticker ────────────────────────
+    try:
+        cvm = _load_cvm_cache()
+        if raw in cvm:
+            info = cvm[raw]
+            resultado['cod_cvm'] = info.get('cod_cvm','')
+            resultado['segmento_b3'] = info.get('segmento','')
+            resultado['categoria_cvm'] = info.get('categoria','')
+            resultado['situacao_cvm'] = info.get('situacao_cvm','')
+            nome_pregao = info.get('nome_pregao','') or resultado['nome_fantasia']
+            # Tentar achar ticker via Brapi
+            tk = _buscar_ticker_brapi(nome_pregao, resultado['razao_social'], info.get('cod_cvm',''))
+            if tk:
+                resultado['ticker'] = tk
+    except Exception as e:
+        resultado['_erro_cvm'] = str(e)
+
+    # ── 3. Brapi — cotação e múltiplos ──────────────────────────────
+    if resultado['ticker']:
+        try:
+            dados_mkt = _buscar_dados_brapi(resultado['ticker'])
+            resultado.update({k: v for k, v in dados_mkt.items() if v not in (None, '', 0)})
+        except Exception as e:
+            resultado['_erro_brapi'] = str(e)
+
+    return jsonify(resultado)
 
 @app.route('/api/treasury')
 def treasury():
@@ -929,6 +1079,9 @@ def index():
 def health():
     return jsonify({'ok': True})
 
+# Cache em memória para textos extraídos dos PDFs (por sessão simples)
+_pdf_cache = {'dfp_text': '', 'fre_text': ''}
+
 @app.route('/api/upload', methods=['POST'])
 def upload():
     result = {'dfp': {}, 'fre': {}, 'errors': [], 'success': False}
@@ -936,27 +1089,45 @@ def upload():
         f = request.files['dfp']
         try:
             text = extract_text_pdf(f)
+            _pdf_cache['dfp_text'] = text
             result['dfp'] = parse_dfp(text)
             result['dfp']['_nome'] = f.filename
-            result['dfp']['_linhas'] = len(text.split('\n'))
+            result['dfp']['_chars'] = len(text)
+            result['dfp']['_extraiu'] = sum(1 for v in result['dfp'].values() if v and str(v) not in ('', 'None', '0'))
         except Exception as e:
-            result['errors'].append(f'DFP: {e}')
+            result['errors'].append(f'DFP: {str(e)}')
     if 'fre' in request.files:
         f = request.files['fre']
         try:
             text = extract_text_pdf(f)
+            _pdf_cache['fre_text'] = text
             result['fre'] = parse_fre(text)
             result['fre']['_nome'] = f.filename
         except Exception as e:
-            result['errors'].append(f'FRE: {e}')
+            result['errors'].append(f'FRE: {str(e)}')
     result['success'] = len(result['errors']) == 0
     return jsonify(result)
 
 @app.route('/api/generate', methods=['POST'])
 def generate():
     body = request.json or {}
-    dfp_data = body.get('dfp') or parse_dfp('')
-    fre_data = body.get('fre') or parse_fre('')
+    # Dados do formulário (preenchidos pelo usuário)
+    form_dfp = body.get('dfp') or {}
+    form_fre = body.get('fre') or {}
+    # Re-parsear PDFs em cache se disponíveis
+    cached_dfp = parse_dfp(_pdf_cache.get('dfp_text','')) if _pdf_cache.get('dfp_text') else {}
+    cached_fre = parse_fre(_pdf_cache.get('fre_text','')) if _pdf_cache.get('fre_text') else {}
+    # Prioridade: formulário > PDF > zero
+    # Se o campo veio do formulário com valor real, usa formulário
+    # Se não, usa o que veio do PDF
+    def merge(form, pdf):
+        result = dict(pdf)  # começa com PDF
+        for k, v in form.items():
+            if v not in (None, '', 0, 0.0):  # formulário tem dado real
+                result[k] = v
+        return result
+    dfp_data = merge(form_dfp, cached_dfp)
+    fre_data = merge(form_fre, cached_fre)
     macro = body.get('macro', {})
     # empresa_nome vem dentro do macro (enviado pelo frontend)
     macro.setdefault('empresa_nome', 'Empresa')

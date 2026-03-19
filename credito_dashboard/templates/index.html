@@ -332,30 +332,79 @@ function updHdr(){
   document.getElementById('hdr-tk').textContent=nm!=='—'?`${tk} · ${nm}`:tk;
   document.getElementById('pv-nome').textContent=nm!=='—'?nm:tk;
 }
+let _dadosMercado={};
 async function buscarCNPJ(){
   const raw=document.getElementById('f-nome').value.replace(/\D/g,'');
   if(raw.length!==14){return;}
   const btn=document.getElementById('btn-cnpj');
-  btn.textContent='⏳';btn.disabled=true;
-  lg(`Consultando CNPJ ${raw}...`,'acc');
+  btn.textContent='⏳ Buscando...';btn.disabled=true;
+  lg(`Consultando CNPJ ${raw} — Receita Federal + CVM + Brapi...`,'acc');
   const res=document.getElementById('cnpj-res');
   res.className='cnpj-result';
   try{
     const r=await fetch(`/api/cnpj/${raw}`);
     const d=await r.json();
     if(d.error)throw new Error(d.error);
-    document.getElementById('f-nome').value=d.nome_fantasia||d.razao_social||'';
+    _dadosMercado=d;
+    // Preencher campos
+    const nome=d.nome_fantasia||d.razao_social||'';
+    document.getElementById('f-nome').value=nome;
     document.getElementById('f-cnpj').value=raw.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/,'$1.$2.$3/$4-$5');
     if(d.cnae)document.getElementById('f-segs').value=d.cnae;
-    if(d.ticker)document.getElementById('f-tk').value=d.ticker;
-    res.style.display='block';
-    res.innerHTML=`✓ <b>${d.razao_social}</b>${d.nome_fantasia&&d.nome_fantasia!==d.razao_social?` · "${d.nome_fantasia}"`:''}${d.cnae?`<br>CNAE: ${d.cnae}`:''} · ${d.situacao||''}${d.municipio?` · ${d.municipio}/${d.uf}`:''}`;
+    if(d.ticker)document.getElementById('f-tk').value=d.ticker.toUpperCase();
+    // Montar HTML de resultado
+    let html=`<div style="margin-bottom:6px"><b style="font-size:11px;color:var(--text)">${d.razao_social}</b>`;
+    if(d.nome_fantasia&&d.nome_fantasia!==d.razao_social)html+=` <span style="color:var(--text3)">· "${d.nome_fantasia}"</span>`;
+    html+=`</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-bottom:8px;font-size:10px">`;
+    if(d.cnae)html+=`<span>📋 ${d.cnae.substring(0,45)}</span>`;
+    if(d.situacao)html+=`<span>📌 ${d.situacao}</span>`;
+    if(d.municipio)html+=`<span>📍 ${d.municipio}/${d.uf}</span>`;
+    if(d.data_abertura)html+=`<span>📅 Fundação: ${d.data_abertura}</span>`;
+    if(d.capital_social)html+=`<span>💰 Capital: R$ ${(d.capital_social/1e6).toFixed(1)}mi</span>`;
+    if(d.funcionarios)html+=`<span>👥 ${d.funcionarios.toLocaleString('pt-BR')} func.</span>`;
+    html+=`</div>`;
+    // CVM / B3
+    if(d.ticker||d.cod_cvm||d.segmento_b3){
+      html+=`<div style="background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);border-radius:3px;padding:6px 8px;margin-bottom:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:10px">`;
+      if(d.ticker)html+=`<span>🏦 <b style="color:var(--blue)">${d.ticker}</b></span>`;
+      if(d.cod_cvm)html+=`<span>📊 CVM: ${d.cod_cvm}</span>`;
+      if(d.segmento_b3)html+=`<span>🏷 ${d.segmento_b3}</span>`;
+      if(d.categoria_cvm)html+=`<span>${d.categoria_cvm}</span>`;
+      if(d.website)html+=`<span><a href="${d.website}" target="_blank" style="color:var(--teal)">${d.website.replace('https://','').replace('http://','').replace('www.','')}</a></span>`;
+      html+=`</div>`;
+    }
+    // Dados de mercado
+    if(d.cotacao){
+      const vc=d.variacao_dia>=0?'var(--green)':'var(--red)';
+      const vs=d.variacao_dia>=0?'+':'';
+      html+=`<div style="background:rgba(0,212,170,.06);border:1px solid rgba(0,212,170,.2);border-radius:3px;padding:8px;margin-bottom:8px">`;
+      html+=`<div style="font-size:9px;color:var(--teal);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px">● Mercado — Tempo Real (Brapi)</div>`;
+      html+=`<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px">`;
+      html+=`<div><div style="font-size:8px;color:var(--text3)">Cotação</div><div style="font-size:15px;font-weight:700;color:var(--text)">R$ ${d.cotacao.toFixed(2)}</div><div style="font-size:9px;color:${vc}">${vs}${d.variacao_dia?.toFixed(2)}%</div></div>`;
+      if(d.market_cap_bi)html+=`<div><div style="font-size:8px;color:var(--text3)">Market Cap</div><div style="font-size:13px;font-weight:600;color:var(--text)">R$ ${d.market_cap_bi.toFixed(1)}bi</div></div>`;
+      if(d.pl)html+=`<div><div style="font-size:8px;color:var(--text3)">P/L</div><div style="font-size:13px;font-weight:600;color:var(--text)">${d.pl.toFixed(1)}x</div></div>`;
+      if(d.pvp)html+=`<div><div style="font-size:8px;color:var(--text3)">P/VP</div><div style="font-size:13px;font-weight:600;color:var(--text)">${d.pvp.toFixed(1)}x</div></div>`;
+      if(d.ev_ebitda)html+=`<div><div style="font-size:8px;color:var(--text3)">EV/EBITDA</div><div style="font-size:13px;font-weight:600;color:var(--text)">${d.ev_ebitda.toFixed(1)}x</div></div>`;
+      if(d.dividend_yield)html+=`<div><div style="font-size:8px;color:var(--text3)">DY</div><div style="font-size:13px;font-weight:600;color:var(--green)">${d.dividend_yield.toFixed(1)}%</div></div>`;
+      if(d.beta)html+=`<div><div style="font-size:8px;color:var(--text3)">Beta</div><div style="font-size:13px;font-weight:600;color:var(--text)">${d.beta.toFixed(2)}</div></div>`;
+      if(d.min_52s&&d.max_52s)html+=`<div><div style="font-size:8px;color:var(--text3)">52s Min/Max</div><div style="font-size:11px;color:var(--text)">R$ ${d.min_52s.toFixed(2)} / ${d.max_52s.toFixed(2)}</div></div>`;
+      html+=`</div>`;
+      if(d.subsetor)html+=`<div style="margin-top:5px;font-size:9px;color:var(--text3)">${d.setor_brapi||''}${d.subsetor?' · '+d.subsetor:''}</div>`;
+      html+=`</div>`;
+    }
+    if(d.descricao)html+=`<div style="margin-top:6px;font-size:10px;color:var(--text2);line-height:1.5;border-top:1px solid var(--border);padding-top:6px">${d.descricao}</div>`;
+    res.style.display='block';res.innerHTML=html;
+    // QSA
     if(d.qsa&&d.qsa.length){
       document.getElementById('qsa-box').style.display='block';
       document.getElementById('qsa-list').innerHTML=d.qsa.map(s=>`<div class="qsa-item">👤 <b>${s.nome}</b> — ${s.qualificacao}</div>`).join('');
     }
     updHdr();detSetor();
-    lg(`✓ ${d.razao_social} encontrada`,'ok');
+    let lm=`✓ ${d.razao_social}`;
+    if(d.ticker)lm+=` | ${d.ticker}`;
+    if(d.cotacao)lm+=` | R$ ${d.cotacao.toFixed(2)}`;
+    if(d.segmento_b3)lm+=` | ${d.segmento_b3}`;
+    lg(lm,'ok');
   }catch(e){
     res.style.display='block';res.className='cnpj-result err';
     res.textContent=`Erro: ${e.message}`;
