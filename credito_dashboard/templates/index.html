@@ -93,8 +93,55 @@ select.dt-inp{padding-right:4px}
 .tese-btn:hover{text-decoration:underline}
 .qsa-item{font-family:var(--mono);font-size:10px;color:var(--text2);padding:3px 0;border-bottom:1px solid rgba(26,37,64,.3)}
 .qsa-item:last-child{border-bottom:none}
+
+/* ── Peers ── */
+.peers-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-top:8px}
+.peer-card{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:10px;cursor:pointer;transition:border-color .2s}
+.peer-card:hover,.peer-card.selected{border-color:var(--accent)}
+.peer-card.principal{border-color:var(--teal)}
+.peer-tk{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px}
+.peer-nm{font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.peer-row{display:flex;justify-content:space-between;font-family:var(--mono);font-size:9px;margin-bottom:2px}
+.peer-lbl{color:var(--text3)}.peer-val{color:var(--text);font-weight:500}
+/* ── Scorecard ── */
+.sc-bar-wrap{background:var(--border);border-radius:2px;height:6px;flex:1;margin:0 8px}
+.sc-bar{height:100%;border-radius:2px;transition:width .4s}
+.sc-row{display:flex;align-items:center;padding:5px 0;border-bottom:1px solid rgba(26,37,64,.3)}
+.sc-row:last-child{border-bottom:none}
+.sc-label{font-family:var(--mono);font-size:9px;color:var(--text3);width:130px;flex-shrink:0}
+.sc-score{font-family:var(--mono);font-size:11px;font-weight:600;width:32px;text-align:right;flex-shrink:0}
+.sc-peso{font-family:var(--mono);font-size:9px;color:var(--text3);width:35px;text-align:right;flex-shrink:0}
+.sc-total{background:var(--bg3);border:1px solid var(--border);border-radius:3px;padding:12px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.sc-num{font-family:var(--mono);font-size:32px;font-weight:700}
+.sc-rat{font-family:var(--mono);font-size:13px;font-weight:600}
+/* ── Notícias ── */
+.news-item{padding:8px 0;border-bottom:1px solid rgba(26,37,64,.4)}
+.news-item:last-child{border-bottom:none}
+.news-titulo{font-size:12px;color:var(--text);line-height:1.4;margin-bottom:3px}
+.news-meta{font-family:var(--mono);font-size:9px;color:var(--text3);display:flex;gap:10px}
+/* ── Histórico ── */
+.hist-item{display:grid;grid-template-columns:1fr 80px 80px 60px auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(26,37,64,.3);font-family:var(--mono);font-size:10px}
+.hist-item:last-child{border-bottom:none}
+.hist-empty{padding:14px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)}
+/* ── Tabs ── */
+.tab-bar{display:flex;gap:2px;background:var(--bg3);padding:4px;border-radius:3px;margin-bottom:12px}
+.tab{flex:1;padding:6px 8px;font-family:var(--mono);font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);cursor:pointer;border-radius:2px;text-align:center;transition:all .15s}
+.tab.active{background:var(--accent);color:white}
+/* ── Z-Score ── */
+.zscore-zona{padding:8px 12px;border-radius:3px;font-family:var(--mono);font-size:11px;margin-top:8px}
+.zona-segura{background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);color:var(--green)}
+.zona-cinza{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:var(--orange)}
+.zona-distress{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+/* ── Debêntures ── */
+.deb-row{display:grid;grid-template-columns:100px 1fr 90px 90px 80px;gap:8px;padding:6px 0;border-bottom:1px solid rgba(26,37,64,.3);font-family:var(--mono);font-size:10px;align-items:center}
+.deb-row:last-child{border-bottom:none}
+.deb-hdr{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+/* ── Histórico gráfico ── */
+.chart-wrap{width:100%;height:180px;position:relative}
+
 @media(max-width:900px){.wrap{grid-template-columns:1fr}.fg,.fg3,.rb{grid-template-columns:1fr}.dt-hdr,.dt-row{grid-template-columns:1fr 0.6fr 1fr 28px}.dt-row>*:nth-child(4),.dt-row>*:nth-child(5){display:none}.dt-hdr>*:nth-child(4),.dt-hdr>*:nth-child(5){display:none}}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 </head>
 <body>
 <header class="header">
@@ -194,6 +241,11 @@ select.dt-inp{padding-right:4px}
       <div id="div-list"></div>
       <button class="btn-s" onclick="addDiv()" style="margin-top:8px">+ Adicionar instrumento</button>
       <div id="div-res" style="margin-top:8px;font-family:var(--mono);font-size:10px;color:var(--text3)"></div>
+      <!-- Gráfico de vencimentos -->
+      <div id="venc-chart-wrap" style="display:none;margin-top:12px;height:110px">
+        <div style="font-family:var(--mono);font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:4px">Cronograma de Vencimentos</div>
+        <canvas id="venc-chart"></canvas>
+      </div>
     </div>
   </div>
 
@@ -233,6 +285,10 @@ select.dt-inp{padding-right:4px}
         <div class="km"><div class="kml">EBITDA Aj.</div><div class="kmv ok" id="k-eb">—</div></div>
         <div class="km"><div class="kml">FCO</div><div class="kmv" id="k-fco">—</div></div>
         <div class="km"><div class="kml">Mg. Bruta</div><div class="kmv" id="k-mgb">—</div></div>
+      </div>
+      <!-- Waterfall DRE mini -->
+      <div id="chart-dre-wrap" style="display:none;margin-top:12px;height:120px">
+        <canvas id="chart-dre"></canvas>
       </div>
     </div>
   </div>
@@ -306,6 +362,89 @@ select.dt-inp{padding-right:4px}
       </div>
       <button class="btn-p" id="bg" onclick="gerar()"><span id="gi">⬇</span><span id="gt">Gerar Análise de Crédito em PDF</span></button>
       <div style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3);text-align:center">Campos vazios usam valores padrão como referência</div>
+    </div>
+  </div>
+
+  <!-- ── SCORECARD + Z-SCORE ─────────────────────── -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Scorecard de Risco de Crédito</span><span class="tag tag-blue" id="sc-tag">Aguardando dados</span></div>
+    <div class="pb">
+      <!-- Gauge chart do score -->
+      <div id="sc-gauge-wrap" style="display:none;position:relative;height:110px;margin-bottom:8px">
+        <canvas id="sc-gauge"></canvas>
+        <div id="sc-gauge-label" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);text-align:center">
+          <div style="font-family:var(--mono);font-size:28px;font-weight:700" id="sc-gauge-num">—</div>
+          <div style="font-family:var(--mono);font-size:9px;color:var(--text3)">de 10,0</div>
+        </div>
+      </div>
+      <div id="sc-body">
+        <div style="padding:16px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Preencha os dados financeiros para calcular o scorecard automaticamente.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── PEER COMPARISON ─────────────────────────── -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Peer Comparison</span><span class="tag tag-gold" id="peer-tag">—</span></div>
+    <div class="pb">
+      <!-- Toggle tabela/gráfico -->
+      <div id="peer-controls" style="display:none;margin-bottom:8px;display:flex;gap:6px">
+        <button onclick="setPeerView('table')" id="peer-btn-table" class="btn-s" style="width:auto;padding:4px 10px;font-size:10px">Tabela</button>
+        <button onclick="setPeerView('chart')" id="peer-btn-chart" class="btn-s" style="width:auto;padding:4px 10px;font-size:10px">Gráfico</button>
+        <select id="peer-metric" onchange="renderPeerChart()" style="background:var(--bg);border:1px solid var(--border2);border-radius:3px;padding:4px 8px;font-family:var(--mono);font-size:10px;color:var(--text);margin-left:auto">
+          <option value="pl">P/L</option>
+          <option value="pvp">P/VP</option>
+          <option value="ev_ebitda">EV/EBITDA</option>
+          <option value="dividend_yield">DY %</option>
+          <option value="market_cap_bi">Market Cap</option>
+        </select>
+      </div>
+      <div id="peer-body">
+        <div style="padding:12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Preencha o ticker para comparar com peers do setor.</div>
+      </div>
+      <div id="peer-chart-wrap" style="display:none;height:200px;margin-top:8px">
+        <canvas id="peer-chart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── DEBÊNTURES / CRAs ────────────────────────── -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Debêntures & CRAs</span><span class="tag tag-blue" id="deb-tag">—</span></div>
+    <div class="pb">
+      <div class="fg" style="margin-bottom:10px">
+        <div class="f">
+          <div class="fl"><span class="d dt"></span>Buscar por Ticker ou CNPJ</div>
+          <div style="display:flex;gap:8px">
+            <div class="fw" style="flex:1"><input type="text" id="deb-search" placeholder="Ex: VALE3 ou HAPV3" style="padding-right:10px"></div>
+            <button class="btn-cnpj" onclick="buscarDeb()">🔍</button>
+          </div>
+        </div>
+      </div>
+      <div id="deb-body">
+        <div style="padding:12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Busque por ticker ou CNPJ para ver emissões de dívida.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── NOTÍCIAS ─────────────────────────────────── -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Notícias Recentes</span><span class="tag tag-green" id="news-tag">—</span></div>
+    <div class="pb">
+      <div id="news-body">
+        <div style="padding:12px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Preencha o ticker para ver notícias recentes.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── HISTÓRICO DE RELATÓRIOS ──────────────────── -->
+  <div class="panel">
+    <div class="ph"><span class="pt">Histórico de Relatórios</span><span class="tag tag-gold" id="hist-tag">—</span></div>
+    <div class="pb">
+      <div id="hist-body">
+        <div class="hist-empty">Nenhum relatório gerado ainda.</div>
+      </div>
+      <button class="btn-s" onclick="carregarHistorico()" style="margin-top:8px">↻ Atualizar</button>
     </div>
   </div>
 
@@ -655,19 +794,26 @@ async function gerar(){
   const btn=document.getElementById('bg'),icon=document.getElementById('gi'),txt=document.getElementById('gt');
   btn.disabled=true;icon.className='spin';icon.textContent='⟳';txt.textContent='Gerando PDF...';
   const tk=(document.getElementById('f-tk').value||'EMPRESA').toUpperCase();
+  const _eb=gv('f-eb',0),_rl=gv('f-rec',0),_dl=gv('f-dl',0),_lb=gv('f-lb',0);
   const dfp={
-    receita_liquida:gv('f-rec',44798),ebitda_ajustado:gv('f-eb',11796),resultado_financeiro:gv('f-rf',-6496),
-    lucro_liquido:gv('f-ll',-1507),fco:gv('f-fco',-973),capex:gv('f-cap',5936),juros_pagos:gv('f-jur',4268),
-    lucro_bruto:gv('f-lb',12394),caixa:gv('f-cx',16000),divida_liquida:gv('f-dl',41218),
-    alavancagem:gv('f-eb',11796)>0?gv('f-dl',41218)/gv('f-eb',11796):3.47,
-    margem_ebitda:gv('f-rec',44798)>0?gv('f-eb',11796)/gv('f-rec',44798)*100:25.1,
-    margem_bruta:gv('f-rec',44798)>0?gv('f-lb',12394)/gv('f-rec',44798)*100:27.7,
-    volume_mineracao_mt:45.849,
-    receita_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.r||22026,ebitda_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.e||2194,
-    receita_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.r||15401,ebitda_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.e||6309,
-    receita_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.r||4906,ebitda_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.e||1290,
-    receita_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.r||4374,ebitda_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.e||1933,
-    receita_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.r||682,ebitda_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.e||255,
+    receita_liquida:_rl||undefined,ebitda_ajustado:_eb||undefined,resultado_financeiro:gv('f-rf',0)||undefined,
+    lucro_liquido:gv('f-ll',0)||undefined,fco:gv('f-fco',0)||undefined,capex:gv('f-cap',0)||undefined,
+    juros_pagos:gv('f-jur',0)||undefined,lucro_bruto:_lb||undefined,caixa:gv('f-cx',0)||undefined,
+    divida_liquida:_dl||undefined,
+    alavancagem:_eb>0&&_dl>0?_dl/_eb:undefined,
+    margem_ebitda:_rl>0&&_eb>0?_eb/_rl*100:undefined,
+    margem_bruta:_rl>0&&_lb>0?_lb/_rl*100:undefined,
+    volume_mineracao_mt:0,
+    receita_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.r||undefined,
+    ebitda_siderurgia:segs.find(s=>s.n?.toLowerCase().includes('sider'))?.e||undefined,
+    receita_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.r||undefined,
+    ebitda_mineracao:segs.find(s=>s.n?.toLowerCase().includes('miner'))?.e||undefined,
+    receita_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.r||undefined,
+    ebitda_cimentos:segs.find(s=>s.n?.toLowerCase().includes('ciment'))?.e||undefined,
+    receita_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.r||undefined,
+    ebitda_logistica:segs.find(s=>s.n?.toLowerCase().includes('logist'))?.e||undefined,
+    receita_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.r||undefined,
+    ebitda_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.e||undefined,
   };
   const fre={divida_bruta:gv('f-db',52924),divida_me_pct:64,divida_brl_pct:36,taxa_usd:6.42,taxa_brl:17.05,taxa_eur:3.53,contingencias:47419,hedge_usd_bi:7.9,covenants_ok:true,vencimentos:{'2026':gv('f-v26',10523),'2027':7806,'2028':11401,'2029':2474,'2030':5952,'2031':6605,'apos_2031':8831},composicao_divida:dividas};
   const mac={
@@ -689,10 +835,617 @@ async function gerar(){
   finally{btn.disabled=false;icon.className='';icon.textContent='⬇';txt.textContent='Gerar Análise de Crédito em PDF';}
 }
 
+
+// ═══════════════════════════════════════════════════════
+// SCORECARD — calcular ao mudar dados financeiros
+// ═══════════════════════════════════════════════════════
+let _scorecardTimer = null;
+function triggerScorecard(){
+  clearTimeout(_scorecardTimer);
+  _scorecardTimer = setTimeout(calcularScorecard, 800);
+}
+
+async function calcularScorecard(){
+  const dfp = coletarDFP();
+  const setor = _setor || 'default';
+  const mkt = _dadosMercado?.market_cap_bi || null;
+  if(!dfp.ebitda_ajustado && !dfp.receita_liquida) return;
+  try{
+    const r = await fetch('/api/scorecard', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({dfp, setor, market_cap_bi: mkt})
+    });
+    const d = await r.json();
+    renderScorecard(d.scorecard, d.zscore);
+  }catch(e){ console.error('Scorecard:', e); }
+}
+
+function renderScorecard(sc, zs){
+  if(!sc) return;
+  const tag = document.getElementById('sc-tag');
+  const body = document.getElementById('sc-body');
+  tag.textContent = `${sc.rating_br} / ${sc.rating_global}`;
+
+  const scoreColor = sc.score >= 7 ? 'var(--green)' : sc.score >= 5 ? 'var(--orange)' : 'var(--red)';
+  let html = `<div class="sc-total">
+    <div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:4px">SCORE GERAL</div>
+      <div class="sc-num" style="color:${scoreColor}">${sc.score.toFixed(1)}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3)">de 10,0</div>
+    </div>
+    <div style="text-align:right">
+      <div class="sc-rat" style="color:${scoreColor}">${sc.rating_br}</div>
+      <div style="font-family:var(--mono);font-size:11px;color:var(--text2);margin:2px 0">${sc.rating_global}</div>
+      <div style="font-family:var(--mono);font-size:9px;color:var(--text3)">${sc.categoria}</div>
+    </div>
+  </div>`;
+
+  html += `<div>`;
+  for(const d of sc.detalhes){
+    const pct = d.score * 10;
+    const col = d.score >= 7 ? 'var(--green)' : d.score >= 5 ? 'var(--orange)' : 'var(--red)';
+    html += `<div class="sc-row">
+      <span class="sc-label">${d.fator}</span>
+      <div class="sc-bar-wrap"><div class="sc-bar" style="width:${pct}%;background:${col}"></div></div>
+      <span class="sc-score" style="color:${col}">${d.score.toFixed(0)}</span>
+      <span class="sc-peso">${d.peso}</span>
+    </div>`;
+  }
+  html += `</div>`;
+
+  // Z-Score
+  if(zs){
+    const zonaCls = `zona-${zs.zona}`;
+    html += `<div class="sdiv" style="margin-top:12px">Altman Z-Score (Emergentes)</div>
+    <div class="zscore-zona ${zonaCls}">
+      <div style="font-size:18px;font-weight:700;margin-bottom:3px">Z'' = ${zs.z_score.toFixed(3)}</div>
+      <div style="font-size:9px;opacity:.85">${zs.zona_desc}</div>
+    </div>
+    <div style="margin-top:8px;display:grid;grid-template-columns:1fr 1fr;gap:6px">
+      ${Object.entries(zs.componentes).map(([k,v])=>`<div style="font-family:var(--mono);font-size:9px;color:var(--text3)">${k.replace('_',' ')}: <span style="color:var(--text)">${v.toFixed(4)}</span></div>`).join('')}
+    </div>`;
+  }
+
+  body.innerHTML = html;
+
+  // Atualizar campos de rating se estiverem vazios
+  if(!document.getElementById('f-rat-br').value) document.getElementById('f-rat-br').value = sc.rating_br;
+  if(!document.getElementById('f-rat-gl').value) document.getElementById('f-rat-gl').value = sc.rating_global;
+  updPrev();
+}
+
+// ═══════════════════════════════════════════════════════
+// PEERS
+// ═══════════════════════════════════════════════════════
+async function carregarPeers(ticker, setor){
+  if(!ticker) return;
+  const body = document.getElementById('peer-body');
+  const tag = document.getElementById('peer-tag');
+  body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--teal)">⏳ Buscando peers...</div>`;
+  try{
+    const r = await fetch(`/api/peers/${ticker}?setor=${setor||''}`);
+    const d = await r.json();
+    if(!d.peers || !d.peers.length){
+      body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Nenhum peer encontrado para ${ticker}.</div>`;
+      return;
+    }
+    tag.textContent = `${d.peers.length} empresas · ${d.setor||''}`;
+    // Tabela comparativa
+    const cols = ['cotacao','market_cap_bi','pl','pvp','ev_ebitda','dividend_yield'];
+    const lbls = ['Cotação','Market Cap (bi)','P/L','P/VP','EV/EBITDA','DY %'];
+    let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="padding:5px 8px;text-align:left;color:var(--text3);font-size:9px">Ticker</th>
+        ${lbls.map(l=>`<th style="padding:5px 8px;text-align:right;color:var(--text3);font-size:9px">${l}</th>`).join('')}
+      </tr></thead><tbody>`;
+    for(const p of d.peers){
+      const bg = p.eh_principal ? 'background:rgba(0,212,170,.06)' : '';
+      const border = p.eh_principal ? 'border-left:2px solid var(--teal)' : '';
+      html += `<tr style="${bg};${border};border-bottom:1px solid rgba(26,37,64,.3)">
+        <td style="padding:5px 8px;font-weight:${p.eh_principal?'700':'400'};color:${p.eh_principal?'var(--teal)':'var(--text)'}">${p.ticker}<div style="font-size:8px;color:var(--text3)">${(p.nome||'').substring(0,20)}</div></td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.cotacao ? `R$ ${p.cotacao.toFixed(2)}` : '—'}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.market_cap_bi ? `R$ ${p.market_cap_bi.toFixed(1)}bi` : '—'}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.pl ? `${p.pl.toFixed(1)}x` : '—'}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.pvp ? `${p.pvp.toFixed(1)}x` : '—'}</td>
+        <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.ev_ebitda ? `${p.ev_ebitda.toFixed(1)}x` : '—'}</td>
+        <td style="padding:5px 8px;text-align:right;color:${p.dividend_yield>5?'var(--green)':'var(--text)'}">${p.dividend_yield ? `${p.dividend_yield.toFixed(1)}%` : '—'}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = `<div style="padding:10px;font-family:var(--mono);font-size:10px;color:var(--red)">Erro: ${e.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// DEBÊNTURES
+// ═══════════════════════════════════════════════════════
+async function buscarDeb(){
+  const termo = document.getElementById('deb-search').value.trim() || document.getElementById('f-tk').value.trim();
+  if(!termo) return;
+  const body = document.getElementById('deb-body');
+  const tag = document.getElementById('deb-tag');
+  body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--teal)">⏳ Buscando emissões...</div>`;
+  try{
+    const r = await fetch(`/api/debentures/${encodeURIComponent(termo)}`);
+    const d = await r.json();
+    if(!d.emissoes || !d.emissoes.length){
+      body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Nenhuma emissão encontrada para "${termo}".</div>`;
+      tag.textContent = '0 emissões';
+      return;
+    }
+    tag.textContent = `${d.emissoes.length} emissões · ${d.fonte}`;
+    let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px">
+      <thead><tr style="border-bottom:1px solid var(--border)">
+        <th style="padding:4px 6px;text-align:left;color:var(--text3);font-size:9px">Código</th>
+        <th style="padding:4px 6px;text-align:left;color:var(--text3);font-size:9px">Tipo</th>
+        <th style="padding:4px 6px;text-align:left;color:var(--text3);font-size:9px">Taxa</th>
+        <th style="padding:4px 6px;text-align:right;color:var(--text3);font-size:9px">Vencimento</th>
+        <th style="padding:4px 6px;text-align:right;color:var(--text3);font-size:9px">Rating</th>
+      </tr></thead><tbody>`;
+    for(const e of d.emissoes){
+      html += `<tr style="border-bottom:1px solid rgba(26,37,64,.3)">
+        <td style="padding:4px 6px;color:var(--blue);font-weight:600">${e.codigo||'—'}</td>
+        <td style="padding:4px 6px;color:var(--text2)">${e.tipo||'—'}</td>
+        <td style="padding:4px 6px;color:var(--gold)">${e.taxa||'—'}${e.indexador&&e.indexador!==e.taxa?' ('+e.indexador+')':''}</td>
+        <td style="padding:4px 6px;text-align:right;color:var(--text)">${e.vencimento||'—'}</td>
+        <td style="padding:4px 6px;text-align:right;color:var(--teal)">${e.rating||'—'}</td>
+      </tr>`;
+    }
+    html += `</tbody></table></div>`;
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = `<div style="padding:10px;font-family:var(--mono);font-size:10px;color:var(--red)">Erro: ${e.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// NOTÍCIAS
+// ═══════════════════════════════════════════════════════
+async function carregarNoticias(ticker){
+  if(!ticker) return;
+  const body = document.getElementById('news-body');
+  const tag = document.getElementById('news-tag');
+  body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--teal)">⏳ Buscando notícias...</div>`;
+  try{
+    const r = await fetch(`/api/noticias/${ticker}`);
+    const d = await r.json();
+    if(!d.noticias || !d.noticias.length){
+      body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Nenhuma notícia encontrada.</div>`;
+      return;
+    }
+    tag.textContent = `${d.noticias.length} notícias`;
+    let html = '';
+    for(const n of d.noticias){
+      const titulo = n.titulo.replace(/ - .+$/, ''); // remover fonte do título
+      html += `<div class="news-item">
+        <div class="news-titulo"><a href="${n.link}" target="_blank" style="color:var(--text);text-decoration:none" onmouseover="this.style.color='var(--teal)'" onmouseout="this.style.color='var(--text)'">${titulo}</a></div>
+        <div class="news-meta">
+          <span>${n.fonte||''}</span>
+          <span>${n.publicado ? new Date(n.publicado).toLocaleDateString('pt-BR') : ''}</span>
+        </div>
+      </div>`;
+    }
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = `<div style="padding:10px;font-family:var(--mono);font-size:10px;color:var(--red)">Erro: ${e.message}</div>`;
+  }
+}
+
+// ═══════════════════════════════════════════════════════
+// HISTÓRICO DE RELATÓRIOS
+// ═══════════════════════════════════════════════════════
+async function carregarHistorico(){
+  const body = document.getElementById('hist-body');
+  const tag = document.getElementById('hist-tag');
+  try{
+    const r = await fetch('/api/relatorios');
+    const d = await r.json();
+    const rels = d.relatorios || [];
+    tag.textContent = `${rels.length} relatório${rels.length!==1?'s':''}`;
+    if(!rels.length){
+      body.innerHTML = `<div class="hist-empty">Nenhum relatório gerado ainda.</div>`;
+      return;
+    }
+    let html = `<div style="font-family:var(--mono);font-size:9px;color:var(--text3);padding:5px 0 8px;display:grid;grid-template-columns:1fr 80px 80px 60px auto;gap:8px;border-bottom:1px solid var(--border)">
+      <span>Empresa</span><span>Data</span><span>Rating</span><span>Rec.</span><span></span>
+    </div>`;
+    for(const rel of rels){
+      const recColor = rel.recomendacao==='COMPRA'?'var(--green)':rel.recomendacao==='VENDA'?'var(--red)':'var(--orange)';
+      html += `<div class="hist-item">
+        <div>
+          <div style="color:var(--text);font-weight:500">${rel.ticker||'—'}</div>
+          <div style="font-size:9px;color:var(--text3)">${(rel.empresa||'').substring(0,25)}</div>
+        </div>
+        <span style="color:var(--text2)">${rel.data||'—'}</span>
+        <span style="color:var(--teal)">${rel.rating_br||'—'}</span>
+        <span style="color:${recColor};font-weight:600">${rel.recomendacao||'—'}</span>
+        <div style="display:flex;gap:4px">
+          <a href="/api/relatorios/${rel.id}" target="_blank" title="Baixar" style="background:var(--bg3);border:1px solid var(--border2);border-radius:2px;padding:3px 7px;color:var(--text2);cursor:pointer;font-size:10px;text-decoration:none">⬇</a>
+          <button onclick="deletarRel('${rel.id}')" title="Deletar" style="background:none;border:1px solid rgba(239,68,68,.3);border-radius:2px;padding:3px 7px;color:var(--red);cursor:pointer;font-size:10px">✕</button>
+        </div>
+      </div>`;
+    }
+    body.innerHTML = html;
+  }catch(e){
+    body.innerHTML = `<div class="hist-empty" style="color:var(--red)">Erro: ${e.message}</div>`;
+  }
+}
+
+async function deletarRel(id){
+  if(!confirm('Deletar este relatório?')) return;
+  await fetch(`/api/relatorios/${id}`, {method:'DELETE'});
+  carregarHistorico();
+}
+
+// ═══════════════════════════════════════════════════════
+// COLETA DE DADOS DO FORMULÁRIO
+// ═══════════════════════════════════════════════════════
+function coletarDFP(){
+  return {
+    ebitda_ajustado: gv('f-eb',0)||undefined,
+    receita_liquida: gv('f-rec',0)||undefined,
+    resultado_financeiro: gv('f-rf',0)||undefined,
+    lucro_liquido: gv('f-ll',0)||undefined,
+    fco: gv('f-fco',0)||undefined,
+    capex: gv('f-cap',0)||undefined,
+    juros_pagos: gv('f-jur',0)||undefined,
+    lucro_bruto: gv('f-lb',0)||undefined,
+    caixa: gv('f-cx',0)||undefined,
+    divida_liquida: gv('f-dl',0)||undefined,
+    divida_bruta: gv('f-db',0)||undefined,
+    patrimonio_liquido: gv('f-pl',0)||undefined,
+    divida_cp: gv('f-dcp',0)||undefined,
+  };
+}
+
+// Trigger automático ao mudar dados financeiros
+['f-eb','f-rec','f-dl','f-cx','f-jur','f-fco','f-dcp','f-lb'].forEach(id=>{
+  const el = document.getElementById(id);
+  if(el) el.addEventListener('input', triggerScorecard);
+});
+
+// Trigger peers e notícias quando ticker muda
+const tkEl = document.getElementById('f-tk');
+if(tkEl){
+  let _tkTimer = null;
+  tkEl.addEventListener('input', ()=>{
+    clearTimeout(_tkTimer);
+    _tkTimer = setTimeout(()=>{
+      const tk = tkEl.value.trim().toUpperCase();
+      if(tk.length >= 4){
+        carregarPeers(tk, _setor||'');
+        carregarNoticias(tk);
+        document.getElementById('deb-search').value = tk;
+      }
+    }, 1000);
+  });
+}
+
 // INIT
 ['usd','sel','ipc','cdi','t10','spd'].forEach(k=>{si(k);});
 calc();fetchT10();
 document.getElementById('f-reco').addEventListener('change',()=>{updPrev();});
+document.getElementById('f-segs').addEventListener('input',()=>atualizarSetoriais(document.getElementById('f-segs').value));
+// Carregar histórico ao iniciar
+carregarHistorico();
+
+// ═══════════════════════════════════════════════════════════════
+// CHART.JS — GRÁFICOS INTERATIVOS
+// ═══════════════════════════════════════════════════════════════
+
+// Registrar defaults globais Chart.js
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'IBM Plex Mono', monospace";
+Chart.defaults.font.size = 10;
+
+// Instâncias dos charts
+let _chartDRE = null, _chartGauge = null, _chartPeer = null, _chartVenc = null;
+let _peerData = [], _peerView = 'table';
+
+// ── Destruir chart com segurança ────────────────────────────────
+function destroyChart(ref) {
+  if (ref) { try { ref.destroy(); } catch(e){} }
+  return null;
+}
+
+// ── WATERFALL DRE ───────────────────────────────────────────────
+function renderChartDRE() {
+  const eb = gv('f-eb', 0);
+  const rl = gv('f-rec', 0);
+  const lb = gv('f-lb', 0);
+  const ll = gv('f-ll', 0);
+  const fco_v = gv('f-fco', 0);
+
+  if (!eb && !rl) {
+    document.getElementById('chart-dre-wrap').style.display = 'none';
+    return;
+  }
+  document.getElementById('chart-dre-wrap').style.display = 'block';
+  _chartDRE = destroyChart(_chartDRE);
+
+  const labels = ['Receita', 'Lucro Bruto', 'EBITDA', 'Lucro Líq.', 'FCO'];
+  const values = [rl, lb, eb, ll, fco_v];
+  const colors = values.map(v => v >= 0 ? 'rgba(34,197,94,.8)' : 'rgba(239,68,68,.8)');
+
+  const ctx = document.getElementById('chart-dre').getContext('2d');
+  _chartDRE = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        data: values.map(v => Math.abs(v) / 1000),
+        backgroundColor: colors,
+        borderRadius: 3,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => {
+              const orig = values[ctx.dataIndex];
+              return ` R$ ${(orig/1000).toFixed(1)}bi`;
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+        y: {
+          grid: { color: 'rgba(26,37,64,.5)' },
+          ticks: { callback: v => `R$${v}bi`, font: { size: 9 } }
+        }
+      }
+    }
+  });
+}
+
+// ── GAUGE DO SCORECARD ──────────────────────────────────────────
+function renderGauge(score) {
+  if (!score) return;
+  const wrap = document.getElementById('sc-gauge-wrap');
+  const numEl = document.getElementById('sc-gauge-num');
+  wrap.style.display = 'block';
+  numEl.textContent = score.toFixed(1);
+
+  // Cor baseada no score
+  const col = score >= 7 ? '#22c55e' : score >= 5 ? '#f59e0b' : '#ef4444';
+  numEl.style.color = col;
+
+  _chartGauge = destroyChart(_chartGauge);
+  const pct = score / 10;
+  const ctx = document.getElementById('sc-gauge').getContext('2d');
+  _chartGauge = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      datasets: [{
+        data: [pct, 1 - pct],
+        backgroundColor: [col, 'rgba(26,37,64,.6)'],
+        borderWidth: 0,
+        circumference: 180,
+        rotation: 270,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      cutout: '75%',
+      plugins: { legend: { display: false }, tooltip: { enabled: false } }
+    }
+  });
+}
+
+// ── PEER CHART ───────────────────────────────────────────────────
+function setPeerView(view) {
+  _peerView = view;
+  document.getElementById('peer-btn-table').style.borderColor = view === 'table' ? 'var(--teal)' : 'var(--border2)';
+  document.getElementById('peer-btn-table').style.color = view === 'table' ? 'var(--teal)' : 'var(--text2)';
+  document.getElementById('peer-btn-chart').style.borderColor = view === 'chart' ? 'var(--teal)' : 'var(--border2)';
+  document.getElementById('peer-btn-chart').style.color = view === 'chart' ? 'var(--teal)' : 'var(--text2)';
+
+  if (view === 'chart') {
+    renderPeerChart();
+  } else {
+    document.getElementById('peer-chart-wrap').style.display = 'none';
+    // Re-mostrar tabela
+    if (_peerData.length) renderPeerTable(_peerData);
+  }
+}
+
+function renderPeerChart() {
+  if (!_peerData.length) return;
+  document.getElementById('peer-chart-wrap').style.display = 'block';
+
+  const metric = document.getElementById('peer-metric').value;
+  const metricLabels = { pl:'P/L', pvp:'P/VP', ev_ebitda:'EV/EBITDA', dividend_yield:'DY %', market_cap_bi:'Market Cap (bi)' };
+
+  _chartPeer = destroyChart(_chartPeer);
+
+  const labels = _peerData.map(p => p.ticker);
+  const values = _peerData.map(p => p[metric] || 0);
+  const colors = _peerData.map(p =>
+    p.eh_principal ? 'rgba(0,212,170,.9)' : 'rgba(59,130,246,.6)'
+  );
+
+  const ctx = document.getElementById('peer-chart').getContext('2d');
+  _chartPeer = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: metricLabels[metric],
+        data: values,
+        backgroundColor: colors,
+        borderRadius: 4,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      indexAxis: 'y',
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: ctx => ` ${ctx.parsed.x?.toFixed(1)}${metric === 'dividend_yield' ? '%' : metric === 'market_cap_bi' ? 'bi' : 'x'}`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(26,37,64,.5)' }, ticks: { font: { size: 9 } } },
+        y: { grid: { display: false }, ticks: { font: { size: 10, weight: '500' } } }
+      }
+    }
+  });
+}
+
+// Injetar no carregarPeers existente — salvar dados e mostrar controles
+const _origCarregarPeers = carregarPeers;
+carregarPeers = async function(ticker, setor) {
+  await _origCarregarPeers(ticker, setor);
+  // Após carregar, injetar controles se ainda não existirem
+  const ctrl = document.getElementById('peer-controls');
+  if (ctrl) ctrl.style.display = 'flex';
+};
+
+// Patch no renderPeerTable para salvar dados
+function renderPeerTable(peers) {
+  _peerData = peers;
+  const body = document.getElementById('peer-body');
+  const cols = ['cotacao','market_cap_bi','pl','pvp','ev_ebitda','dividend_yield'];
+  const lbls = ['Cotação','Market Cap','P/L','P/VP','EV/EBITDA','DY %'];
+  let html = `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:10px">
+    <thead><tr style="border-bottom:1px solid var(--border)">
+      <th style="padding:5px 8px;text-align:left;color:var(--text3);font-size:9px">Ticker</th>
+      ${lbls.map(l=>`<th style="padding:5px 8px;text-align:right;color:var(--text3);font-size:9px">${l}</th>`).join('')}
+    </tr></thead><tbody>`;
+  for(const p of peers){
+    const bg = p.eh_principal ? 'background:rgba(0,212,170,.06)' : '';
+    const border = p.eh_principal ? 'border-left:2px solid var(--teal)' : '';
+    html += `<tr style="${bg};${border};border-bottom:1px solid rgba(26,37,64,.3)">
+      <td style="padding:5px 8px;font-weight:${p.eh_principal?'700':'400'};color:${p.eh_principal?'var(--teal)':'var(--text)'}">${p.ticker}<div style="font-size:8px;color:var(--text3)">${(p.nome||'').substring(0,20)}</div></td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.cotacao ? `R$ ${p.cotacao.toFixed(2)}` : '—'}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.market_cap_bi ? `R$ ${p.market_cap_bi.toFixed(1)}bi` : '—'}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.pl ? `${p.pl.toFixed(1)}x` : '—'}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.pvp ? `${p.pvp.toFixed(1)}x` : '—'}</td>
+      <td style="padding:5px 8px;text-align:right;color:var(--text)">${p.ev_ebitda ? `${p.ev_ebitda.toFixed(1)}x` : '—'}</td>
+      <td style="padding:5px 8px;text-align:right;color:${p.dividend_yield>5?'var(--green)':'var(--text)'}">${p.dividend_yield ? `${p.dividend_yield.toFixed(1)}%` : '—'}</td>
+    </tr>`;
+  }
+  html += `</tbody></table></div>`;
+  body.innerHTML = html;
+}
+
+// ── GRÁFICO DE VENCIMENTOS ──────────────────────────────────────
+function renderVencChart(vencimentos) {
+  if (!vencimentos || !Object.keys(vencimentos).length) {
+    document.getElementById('venc-chart-wrap').style.display = 'none';
+    return;
+  }
+  // Construir do formulário se não vier via argumento
+  if (!vencimentos) {
+    const v26 = gv('f-v26', 0);
+    if (!v26) { document.getElementById('venc-chart-wrap').style.display = 'none'; return; }
+    vencimentos = { '2026': v26 };
+  }
+
+  document.getElementById('venc-chart-wrap').style.display = 'block';
+  _chartVenc = destroyChart(_chartVenc);
+
+  const anos = Object.keys(vencimentos).filter(k => k !== 'apos_2031').sort();
+  const vals = anos.map(a => (vencimentos[a] || 0) / 1000);
+  const max = Math.max(...vals);
+  const colors = vals.map(v => v === max ? 'rgba(239,68,68,.85)' : 'rgba(59,130,246,.65)');
+
+  const ctx = document.getElementById('venc-chart').getContext('2d');
+  _chartVenc = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: anos,
+      datasets: [{
+        data: vals,
+        backgroundColor: colors,
+        borderRadius: 3,
+        borderSkipped: false,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: ctx => ` R$ ${ctx.parsed.y.toFixed(1)}bi` } }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9 } } },
+        y: {
+          grid: { color: 'rgba(26,37,64,.5)' },
+          ticks: { callback: v => `R$${v}bi`, font: { size: 9 } }
+        }
+      }
+    }
+  });
+}
+
+// ── PATCH: injetar charts nas funções existentes ─────────────────
+
+// Após calc(), atualizar DRE chart
+const _origCalc = calc;
+calc = function() {
+  _origCalc();
+  renderChartDRE();
+};
+
+// Após renderScorecard(), mostrar gauge
+const _origRenderScorecard = renderScorecard;
+renderScorecard = function(sc, zs) {
+  _origRenderScorecard(sc, zs);
+  if (sc && sc.score) renderGauge(sc.score);
+};
+
+// Patch no carregarPeers para usar renderPeerTable
+const _origCarregarPeersInner = carregarPeers;
+carregarPeers = async function(ticker, setor) {
+  if(!ticker) return;
+  const body = document.getElementById('peer-body');
+  const tag = document.getElementById('peer-tag');
+  body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--teal)">⏳ Buscando peers...</div>`;
+  try{
+    const r = await fetch(`/api/peers/${ticker}?setor=${setor||''}`);
+    const d = await r.json();
+    const ctrl = document.getElementById('peer-controls');
+    if(!d.peers || !d.peers.length){
+      body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Nenhum peer encontrado para ${ticker}.</div>`;
+      if(ctrl) ctrl.style.display='none';
+      return;
+    }
+    tag.textContent = `${d.peers.length} empresas · ${d.setor||''}`;
+    if(ctrl) ctrl.style.display='flex';
+    renderPeerTable(d.peers);
+    document.getElementById('peer-chart-wrap').style.display = 'none';
+    _peerView = 'table';
+  }catch(e){
+    body.innerHTML = `<div style="padding:10px;font-family:var(--mono);font-size:10px;color:var(--red)">Erro: ${e.message}</div>`;
+  }
+};
+
+// Mostrar gráfico de vencimentos ao preencher campo de maior pico
+document.addEventListener('DOMContentLoaded', () => {
+  const fv26 = document.getElementById('f-v26');
+  if (fv26) {
+    fv26.addEventListener('input', () => {
+      const v = parseFloat(fv26.value);
+      if (v > 0) renderVencChart({ '2026': v });
+    });
+  }
+  // Carregar histórico ao iniciar
+  carregarHistorico();
+});
+
 </script>
 </body>
 </html>

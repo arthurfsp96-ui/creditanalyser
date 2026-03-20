@@ -334,7 +334,7 @@ def draw_cover(canvas, doc, dfp, fre, macro):
     canvas.setFillColor(GRAY_DARK)
     canvas.setFont('Helvetica', 7.8)
     ebitda = dfp.get('ebitda_ajustado') or 0
-    caixa = dfp.get('caixa', 16000)
+    caixa = dfp.get('caixa') or 0
     venc_2026 = fre.get('vencimentos', {}).get('2026') or 0
     tese_usuario = macro.get('tese_resumo','')
     _nm = macro.get("empresa_nome","A empresa")
@@ -419,6 +419,7 @@ def gerar_pdf(dfp, fre, macro):
     juros = dfp.get('juros_pagos') or 0
     rf    = dfp.get('resultado_financeiro') or 0
     icj   = round(eb/juros, 2) if juros else 0
+    pl    = dfp.get('patrimonio_liquido') or dfp.get('pl') or 0
 
     # Parâmetros macro
     selic     = macro.get('selic', 14.75)
@@ -448,44 +449,41 @@ def gerar_pdf(dfp, fre, macro):
     story.append(SP(4))
 
     # Tabela KPI
-    kpi_hdr = [P('Indicador', s['th']), P('2023', s['th']), P('2024', s['th']),
-               P('2025A', s['th']), P('Target / Threshold', s['th'])]
-    ok = lambda v, t, inv=False: '✓ OK' if (v<=t if inv else v>=t) else '⚠ Atenção'
+    _ano_r = macro.get('empresa_database','').split('/')[-1] if '/' in macro.get('empresa_database','') else macro.get('empresa_database','2025')
+    kpi_hdr = [P('Indicador', s['th']), P(f'{_ano_r}A', s['th']),
+               P('Benchmark Setorial', s['th']), P('Situação', s['th'])]
+    # Benchmarks genéricos por setor
+    _st = macro.get('setor','')
+    _alav_bm  = '< 2,5x' if _st in ('energia','logistica') else ('< 1,5x' if _st == 'bancos' else '< 3,0x')
+    _icj_bm   = '> 3,0x' if _st in ('energia','logistica') else '> 2,5x'
+    _mg_bm    = '> 40%' if _st == 'petroleo' else ('> 30%' if _st in ('energia','papel') else '> 20%')
+    _fco_bm   = '> 0'
     kpi_rows = [
-        ['Receita Líquida (R$ bi)',      '37,8', '43,7', f'{rl/1000:.1f}',    '—'],
-        ['EBITDA Ajustado (R$ bi)',      '7,2*', '10,2', f'{eb/1000:.1f}',    'Crescimento'],
-        ['Margem EBITDA Aj. (%)',        '~19%', '23,4%', f'{mg_eb:.1f}%',    'acima 22%'],
-        ['DL / EBITDA Aj. (x)',          '4,2*', '3,3',  f'{alav:.2f}',       'abaixo 2,5x'],
-        ['Dívida Líquida (R$ bi)',       '~43', '34,2',  f'{dl/1000:.1f}',    'Redução'],
-        ['ICJ — EBITDA/Juros (x)',       '1,7*', '1,4',  f'{icj:.2f}',        'acima 2,5x'],
-        ['FCO (R$ bi)',                   '4,5*', '8,7',  f'{fco/1000:.1f}',   'Positivo'],
-        ['Caixa / Dívida CP (%)',        '—',   '264%',  f'{caixa/venc_2026*100:.0f}%' if venc_2026 > 0 else '—', 'acima 150%'],
-        ['Lucro (Prejuízo) Líquido (R$ bi)', '(2,1)*', '(1,5)', f'({abs(ll)/1000:.1f})', '—'],
+        ['Receita Líquida (R$ bi)',    f'{rl/1000:.1f}' if rl else '—',   '—',     '—'],
+        ['EBITDA Ajustado (R$ bi)',    f'{eb/1000:.1f}' if eb else '—',   '—',     '—'],
+        ['Margem EBITDA (%)',          f'{mg_eb:.1f}%' if mg_eb else '—', _mg_bm,  '✓ OK' if mg_eb and mg_eb > 20 else ('⚠' if mg_eb else '—')],
+        ['DL / EBITDA (x)',            f'{alav:.2f}x' if alav else '—',   _alav_bm,'✓ OK' if alav and alav < 3.0 else ('⚠' if alav else '—')],
+        ['ICJ — EBITDA/Juros (x)',     f'{icj:.2f}x' if icj else '—',    _icj_bm, '✓ OK' if icj and icj > 2.5 else ('⚠' if icj else '—')],
+        ['FCO (R$ bi)', f'{fco/1000:.1f}' if fco else '—', _fco_bm, '✓ OK' if fco and fco > 0 else ('⚠ Negativo' if fco else '—')],
+        ['Caixa / Dívida CP (%)', f'{caixa/venc_2026*100:.0f}%' if (caixa and venc_2026 > 0) else '—', '> 100%', '✓ OK' if caixa and venc_2026 > 0 and caixa/venc_2026 > 1 else '⚠'],
+        ['Lucro (Prejuízo) Líquido (R$ bi)', f'{ll/1000:.1f}' if ll else '—', '—', '✓' if ll and ll > 0 else ('⚠' if ll else '—')],
     ]
     rc = []
     for i, r in enumerate(kpi_rows):
-        last = r[4]
-        val_str = r[3].replace('(','').replace(')','')
+        sit = r[3]  # coluna Situação (índice 3)
         row_i = i+1
-        if 'acima' in last or 'Positivo' in last or 'Crescimento' in last:
-            try:
-                v_num = float(val_str.replace('%','').replace(',','.'))
-                t_num_s = last.replace('acima','').replace('%','').replace('x','').strip()
-                try:
-                    t_num = float(t_num_s.replace(',','.'))
-                    color = HexColor('#DCFCE7') if v_num >= t_num else HexColor('#FEE2E2')
-                    rc.append(('BACKGROUND', (3,row_i), (3,row_i), color))
-                except: pass
-            except: pass
-        elif 'Redução' in last and i > 0:
-            rc.append(('BACKGROUND', (3,row_i), (3,row_i), HexColor('#FEF3C7')))
-        if '(' in r[3]:
+        if '✓' in sit:
+            rc.append(('BACKGROUND', (3,row_i), (3,row_i), HexColor('#DCFCE7')))
+            rc.append(('TEXTCOLOR', (3,row_i), (3,row_i), GREEN_POS))
+        elif '⚠' in sit:
+            rc.append(('BACKGROUND', (3,row_i), (3,row_i), HexColor('#FEE2E2')))
             rc.append(('TEXTCOLOR', (3,row_i), (3,row_i), RED_NEG))
-            rc.append(('FONTNAME', (3,row_i), (3,row_i), 'Helvetica-Bold'))
+        rc.append(('FONTNAME', (3,row_i), (3,row_i), 'Helvetica-Bold'))
 
-    kd = [kpi_hdr] + [[P(r[j], s['tl'] if j==0 else s['tc']) for j in range(5)] for r in kpi_rows]
-    story.append(tbl(kd, [W*0.32, W*0.14, W*0.14, W*0.15, W*0.25], rc))
-    story.append(P('* Estimativas / dados não auditados de períodos anteriores. Fonte: DFP 31/12/2025 e FRE 2025.', s['cap']))
+    _ano_ref_kd = macro.get('empresa_database','').split('/')[-1] if '/' in macro.get('empresa_database','') else macro.get('empresa_database','')
+    kd = [kpi_hdr] + [[P(r[j], s['tl'] if j==0 else s['tc']) for j in range(4)] for r in kpi_rows]
+    story.append(tbl(kd, [W*0.34, W*0.18, W*0.22, W*0.26], rc))
+    story.append(P(f'Fonte: documentos enviados pelo usuário. Data-base: {macro.get("empresa_database","informada")}.', s['cap']))
     story.append(SP(5))
 
     # ────────────────────────────────────────────────────────────────────
@@ -529,11 +527,11 @@ def gerar_pdf(dfp, fre, macro):
         mac_rows.insert(4, ['Minério Fe 62% (US$/t)', f'US$ {minerio:.0f}',
             'Principal driver de receita e EBITDA', f'US$10/t = ±{imp_ebitda_1pct/eb*100*0.41:.1f}% EBITDA' if eb > 0 else '—'])
     elif _setor_mac == 'petroleo':
-        mac_rows.insert(4, ['Petróleo Brent (US$/bbl)', 'US$ 78',
+        mac_rows.insert(4, ['Petróleo Brent (US$/bbl)', f'US$ {macro.get("brent",78):.0f}',
             'Principal driver de receita E&P', 'US$10/bbl = ±impacto direto na receita'])
     elif _setor_mac == 'agro':
         mac_rows.insert(4, ['Commodities Agrícolas', 'Var.',
-            'Preços de soja/milho impactam receita', 'Correlação com câmbio e demanda China'])
+            'Commodities agrícolas impactam receita e margens', 'Alta correlação com câmbio e ciclo global'])
     md = [mac_hdr] + [[P(r[j], s['tl'] if j==0 else (s['tlb'] if j==1 else s['tl'])) for j in range(4)] for r in mac_rows]
     story.append(tbl(md, [W*0.22, W*0.14, W*0.32, W*0.32]))
     story.append(SP(5))
@@ -546,38 +544,38 @@ def gerar_pdf(dfp, fre, macro):
 
     # DRE
     story.append(P('3.1 Demonstração de Resultado Consolidada', s['ssh']))
-    _ano_ref = macro.get('empresa_database','2025').split('/')[-1] if '/' in macro.get('empresa_database','2025') else macro.get('empresa_database','2025')
-    _ano_ant = str(int(_ano_ref) - 1) if _ano_ref.isdigit() else 'Anterior'
+    _ano_ref = macro.get('empresa_database','').split('/')[-1] if '/' in macro.get('empresa_database','') else macro.get('empresa_database','')
     lb = dfp.get('lucro_bruto') or 0
     mg_b = dfp.get('margem_bruta') or (round(lb/rl*100,1) if rl > 0 else 0)
-    # Variação YoY — só mostra se tiver dado do ano anterior (campo prev_*)
-    def var_yoy(atual, ant_key):
-        ant = dfp.get(ant_key)
-        if ant and ant != 0 and atual:
-            pct = (atual - ant) / abs(ant) * 100
-            return f'{pct:+.1f}%'
-        return '—'
-    dre_hdr = [P('(R$ milhões)', s['th']), P(f'{_ano_ant}A', s['th']),
-               P(f'{_ano_ref}A', s['th']), P('Var. a/a', s['th']), P('Comentário', s['th'])]
     def fmt_val(v, neg=False):
-        if not v: return '—'
+        if v is None or v == 0: return '—'
         return f'({abs(v):,.0f})' if neg and v < 0 else f'{v:,.0f}'
-    dre_rows = [
-        ['Receita Líquida',         fmt_val(dfp.get('prev_receita')),     fmt_val(rl),          var_yoy(rl,'prev_receita'),    f'Receita consolidada — margem bruta {mg_b:.1f}%'],
-        ['Lucro Bruto',             fmt_val(dfp.get('prev_lucro_bruto')), fmt_val(lb),          var_yoy(lb,'prev_lucro_bruto'),f'Margem bruta: {mg_b:.1f}%'],
-        ['EBITDA Ajustado',         fmt_val(dfp.get('prev_ebitda')),      fmt_val(eb),          var_yoy(eb,'prev_ebitda'),     f'Margem EBITDA: {mg_eb:.1f}%'],
-        ['Resultado Financeiro',    fmt_val(dfp.get('prev_rf'),True),     fmt_val(rf,True),     '—',                           'Inclui juros e variação cambial'],
-        ['Lucro (Prejuízo) Líquido',fmt_val(dfp.get('prev_ll'),True),    fmt_val(ll,True),     var_yoy(ll,'prev_ll'),         'Resultado líquido do período'],
-        ['FCO',                     fmt_val(dfp.get('prev_fco')),         fmt_val(fco),         var_yoy(fco,'prev_fco'),       'Fluxo de caixa operacional'],
-        ['CAPEX',                   fmt_val(dfp.get('prev_capex'),True),  fmt_val(capex,True),  '—',                           'Investimentos em imobilizado'],
-    ]
-    bold_rows = {2, 3, 4}
-    extra_dre = [('FONTNAME',(0,i+1),(-1,i+1),'Helvetica-Bold') for i in bold_rows]
-    extra_dre += [('BACKGROUND',(0,3),(-1,3), HexColor('#FEF3C7')),
-                  ('BACKGROUND',(0,4),(-1,4), HexColor('#FEE2E2')),
-                  ('BACKGROUND',(0,2),(-1,2), HexColor('#DCFCE7'))]
-    dd = [dre_hdr] + [[P(r[j], s['tl'] if j==0 else (s['tl'] if j==4 else s['tc'])) for j in range(5)] for r in dre_rows]
-    story.append(tbl(dd, [W*0.22, W*0.13, W*0.13, W*0.10, W*0.42], extra_dre))
+    # Só mostrar linhas que têm dado real
+    dre_hdr = [P('(R$ milhões)', s['th']),
+               P(f'{_ano_ref}' if _ano_ref else 'Período', s['th']),
+               P('Margem / Obs.', s['th'])]
+    dre_rows = []
+    if rl:  dre_rows.append(['Receita Líquida',          fmt_val(rl),         f'Base {_ano_ref}' if _ano_ref else '—'])
+    if lb:  dre_rows.append(['Lucro Bruto',               fmt_val(lb),         f'Mg. Bruta: {mg_b:.1f}%'])
+    if eb:  dre_rows.append(['EBITDA Ajustado',           fmt_val(eb),         f'Mg. EBITDA: {mg_eb:.1f}%'])
+    if rf:  dre_rows.append(['Resultado Financeiro',      fmt_val(rf, True),   'Juros + variação cambial'])
+    if ll is not None and ll != 0:
+            dre_rows.append(['Lucro (Prejuízo) Líquido',  fmt_val(ll, True),   'Resultado líquido'])
+    if fco: dre_rows.append(['FCO',                       fmt_val(fco),        'Fluxo de caixa operacional'])
+    if capex: dre_rows.append(['CAPEX',                   fmt_val(capex,True), 'Investimentos'])
+    if juros: dre_rows.append(['Juros Pagos',             fmt_val(juros,True), 'Despesas financeiras pagas'])
+    if not dre_rows:
+        dre_rows = [['Sem dados financeiros preenchidos', '—', '—']]
+    bold_idx = {i for i,r in enumerate(dre_rows) if 'EBITDA' in r[0] or 'Lucro B' in r[0]}
+    extra_dre = [('FONTNAME',(0,i+1),(-1,i+1),'Helvetica-Bold') for i in bold_idx]
+    for i, r in enumerate(dre_rows):
+        if 'EBITDA' in r[0]: extra_dre.append(('BACKGROUND',(0,i+1),(-1,i+1), HexColor('#DCFCE7')))
+        elif 'Prejuízo' in r[0] or (r[1].startswith('(') and 'Líquido' in r[0]):
+            extra_dre.append(('BACKGROUND',(0,i+1),(-1,i+1), HexColor('#FEE2E2')))
+        elif 'Resultado Fin' in r[0]: extra_dre.append(('BACKGROUND',(0,i+1),(-1,i+1), HexColor('#FEF3C7')))
+    dd = [dre_hdr] + [[P(r[j], s['tl'] if j==0 else s['tc']) for j in range(3)] for r in dre_rows]
+    story.append(tbl(dd, [W*0.38, W*0.22, W*0.40], extra_dre))
+    story.append(P(f'Fonte: documentos enviados. Data-base: {macro.get("empresa_database","informada")}. Valores em R$ milhões.', s['cap']))
     story.append(SP(5))
 
     # Segmentos
@@ -586,10 +584,10 @@ def gerar_pdf(dfp, fre, macro):
                P('EBITDA Aj. (R$ mi)', s['th']), P('Mg. EBITDA', s['th']), P('Destaque', s['th'])]
     # Segmentos: usar dados do usuário, ignorar segmentos sem receita
     _segs_raw = [
-        (dfp.get('seg1_nome','') or dfp.get('receita_siderurgia') and 'Siderurgia', dfp.get('receita_siderurgia'), dfp.get('ebitda_siderurgia')),
-        (dfp.get('seg2_nome','') or dfp.get('receita_mineracao') and 'Mineração',   dfp.get('receita_mineracao'),   dfp.get('ebitda_mineracao')),
-        (dfp.get('seg3_nome','') or dfp.get('receita_cimentos') and 'Cimentos',    dfp.get('receita_cimentos'),    dfp.get('ebitda_cimentos')),
-        (dfp.get('seg4_nome','') or dfp.get('receita_logistica') and 'Logística',  dfp.get('receita_logistica'),   dfp.get('ebitda_logistica')),
+        (dfp.get('seg1_nome') or None, dfp.get('receita_siderurgia') or dfp.get('receita_seg1'), dfp.get('ebitda_siderurgia') or dfp.get('ebitda_seg1')),
+        (dfp.get('seg2_nome') or None, dfp.get('receita_mineracao') or dfp.get('receita_seg2'),  dfp.get('ebitda_mineracao') or dfp.get('ebitda_seg2')),
+        (dfp.get('seg3_nome') or None, dfp.get('receita_cimentos') or dfp.get('receita_seg3'),   dfp.get('ebitda_cimentos') or dfp.get('ebitda_seg3')),
+        (dfp.get('seg4_nome') or None, dfp.get('receita_logistica') or dfp.get('receita_seg4'),  dfp.get('ebitda_logistica') or dfp.get('ebitda_seg4')),
         (dfp.get('seg5_nome','') or dfp.get('receita_energia') and 'Energia',      dfp.get('receita_energia'),     dfp.get('ebitda_energia')),
     ]
     segs = [(nm, rc or 0, eb or 0, '') for nm, rc, eb in _segs_raw if nm and rc and rc > 0]
@@ -675,8 +673,9 @@ def gerar_pdf(dfp, fre, macro):
             story.append(SP(4))
 
     story.append(P('4.2 Indicadores de Crédito', s['ssh']))
-    ic_hdr = [P('Métrica', s['th']), P('2025A', s['th']), P('Target Int.', s['th']),
-              P('Threshold BB', s['th']), P('Situação', s['th'])]
+    _ic_ano = macro.get('empresa_database','').split('/')[-1] if '/' in macro.get('empresa_database','') else macro.get('empresa_database','')
+    ic_hdr = [P('Métrica', s['th']), P(f'{_ic_ano}A' if _ic_ano else 'Atual', s['th']),
+              P('Benchmark', s['th']), P('Limite Mínimo', s['th']), P('Situação', s['th'])]
     cov_cp = caixa/venc_2026*100 if venc_2026 > 0 else 0
     ic_rows = [
         ['DL / EBITDA Ajustado (x)',    f'{alav:.2f}x',            '2,5x',          'abaixo 3,0x',   '⚠ Acima' if alav > 3.0 else '✓ OK'],
@@ -684,7 +683,7 @@ def gerar_pdf(dfp, fre, macro):
         ['Dív. Bruta / EBITDA (x)',     f'{db/eb:.2f}x' if eb > 0 else '—', 'abaixo 5,0x', 'abaixo 5,5x', '⚠ Acima' if (eb > 0 and db/eb > 5.0) else '✓ OK'],
         ['FCO / Dívida Bruta (%)',      f'{fco/db*100:.1f}%' if db > 0 else '—', 'acima 10%', 'acima 8%', '⚠ Negativo' if fco < 0 else '✓ OK'],
         ['Caixa / Dív. CP (%)',         f'{cov_cp:.0f}%',          'acima 150%',    'acima 100%',    '✓ OK' if cov_cp > 150 else '⚠ Atenção'],
-        ['DL / Patrimônio Líquido (x)', f'{dl/15700:.2f}x',        'abaixo 2,5x',   'abaixo 3,0x',   '⚠ Elevado' if dl/15700 > 2.5 else '✓ OK'],
+        ['DL / Patrimônio Líquido (x)', f'{dl/pl:.2f}x' if pl and pl > 0 else '—', 'abaixo 2,5x', 'abaixo 3,0x', '⚠ Elevado' if (pl and pl > 0 and dl/pl > 2.5) else '✓ OK'],
         ['Margem EBITDA Aj. (%)',       f'{mg_eb:.1f}%',           'acima 22%',     'acima 18%',     '✓ OK' if mg_eb > 22 else '⚠ Atenção'],
     ]
     ic_rc = []
@@ -708,7 +707,7 @@ def gerar_pdf(dfp, fre, macro):
     if _setor in ['mineracao','siderurgia']:
         _sens_desc += f', minério Fe US$ {minerio:.0f}/t'
     if _setor == 'petroleo':
-        _sens_desc += f', Brent ~US$ 78/bbl'
+        _sens_desc += f', Brent ~US$ {macro.get("brent",78):.0f}/bbl'
     _sens_desc += f', Treasury 10Y {t10y:.2f}%), calculamos os impactos marginais sobre EBITDA e alavancagem:'
     story.append(P(_sens_desc, s['body']))
     story.append(SP(3))
@@ -750,8 +749,9 @@ def gerar_pdf(dfp, fre, macro):
     _setor_s = macro.get('setor','')
     if _setor_s in ('mineracao','siderurgia'):
         imp_com = eb * 0.08
-        sh_rows.insert(4, ['Commodity principal', '+10%', f'+{imp_com:,.0f}', '—', alav_safe(dl, eb+imp_com)])
-        sh_rows.insert(5, ['Commodity principal', '-10%', f'-{imp_com:,.0f}', '—', alav_safe(dl, eb-imp_com)])
+        _comm_nome = 'Minério Fe 62%' if _setor_s == 'mineracao' else 'Aço/HRC'
+        sh_rows.insert(4, [f'{_comm_nome} +10%', '+10%', f'+{imp_com:,.0f}', '—', alav_safe(dl, eb+imp_com)])
+        sh_rows.insert(5, [f'{_comm_nome} -10%', '-10%', f'-{imp_com:,.0f}', '—', alav_safe(dl, eb-imp_com)])
     elif _setor_s == 'petroleo':
         imp_brent = eb * 0.10
         sh_rows.insert(4, ['Brent (US$/bbl)', '+US$10/bbl', f'+{imp_brent:,.0f}', '—', alav_safe(dl, eb+imp_brent)])
@@ -854,11 +854,11 @@ def gerar_pdf(dfp, fre, macro):
     # Risco setorial
     _setor_r = macro.get('setor','')
     if _setor_r == 'petroleo':
-        risk_rows.append(['Volatilidade do Brent', 'ALTO', 'MÉDIA',
+        risk_rows.append([f'Volatilidade do Brent (atual US$ {macro.get("brent",78):.0f}/bbl)', 'ALTO', 'MÉDIA',
             'Preço do petróleo impacta diretamente receita e EBITDA E&P.'])
     elif _setor_r in ('mineracao','siderurgia'):
         risk_rows.append(['Volatilidade de commodities', 'ALTO', 'MÉDIA',
-            'Preços de minério/aço correlacionados à demanda China e ciclo global.'])
+            'Preços das commodities do setor correlacionados ao ciclo econômico global.'])
     elif _setor_r == 'varejo':
         risk_rows.append(['Inadimplência do consumidor', 'MÉDIO', 'MÉDIA',
             f'Selic {selic:.2f}% pressionando renda. Monitorar SSS e inadimplência.'])
