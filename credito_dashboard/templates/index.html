@@ -716,7 +716,10 @@ async function proc(){
       fill(d.dfp);
       document.getElementById('dre-src').textContent='PDF';
       document.getElementById('bal-src').textContent='PDF';
-      lg('Campos preenchidos via PDF','ok');
+      const nc = d.dfp._campos_extraidos || Object.values(d.dfp).filter(v=>v&&v!==0&&v!=='').length;
+      const qual = nc >= 8 ? 'alta ✓' : nc >= 4 ? 'média ⚠' : 'baixa ✗';
+      lg(`PDF extraído: ${nc} campos (qualidade ${qual})`, nc >= 6 ? 'ok' : 'wrn');
+      if(nc < 4) lg('Poucos campos extraídos — preencha manualmente os dados ausentes','wrn');
     }
     if(d.fre&&Object.keys(d.fre).length>1)lg('FRE carregado','ok');
     if(d.errors?.length)d.errors.forEach(e=>lg(e,'err'));
@@ -731,9 +734,16 @@ function fill(d){
   sv2('f-ll',d.lucro_liquido);sv2('f-fco',d.fco);sv2('f-cap',d.capex);sv2('f-jur',d.juros_pagos);
   sv2('f-lb',d.lucro_bruto);sv2('f-cx',d.caixa);sv2('f-dl',d.divida_liquida);
   sv2('f-db',d.divida_bruta);sv2('f-pl',d.patrimonio_liquido);sv2('f-dcp',d.divida_cp);
-  if(d.receita_siderurgia||d.receita_mineracao){
-    segs=[];
-    [['Siderurgia',d.receita_siderurgia,d.ebitda_siderurgia],['Mineração',d.receita_mineracao,d.ebitda_mineracao],['Cimentos',d.receita_cimentos,d.ebitda_cimentos],['Logística',d.receita_logistica,d.ebitda_logistica],['Energia',d.receita_energia,d.ebitda_energia]].forEach(([n,r,e])=>{if(r)segs.push({id:Date.now()+Math.random(),n,r:r||'',e:e||''});});
+  // Segmentos: preencher somente se vier do PDF com dados reais
+  const segRaw = [
+    [d.seg1_nome, d.receita_seg1||d.receita_siderurgia, d.ebitda_seg1||d.ebitda_siderurgia],
+    [d.seg2_nome, d.receita_seg2||d.receita_mineracao,  d.ebitda_seg2||d.ebitda_mineracao],
+    [d.seg3_nome, d.receita_seg3||d.receita_cimentos,   d.ebitda_seg3||d.ebitda_cimentos],
+    [d.seg4_nome, d.receita_seg4||d.receita_logistica,  d.ebitda_seg4||d.ebitda_logistica],
+  ];
+  const segsFilled = segRaw.filter(([n,r,e]) => r || e);
+  if(segsFilled.length > 0){
+    segs = segsFilled.map(([n,r,e]) => ({id:Date.now()+Math.random(), n:n||'Segmento', r:r||'', e:e||''}));
     rSeg();
   }
   calc();
@@ -815,13 +825,27 @@ async function gerar(){
     receita_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.r||undefined,
     ebitda_energia:segs.find(s=>s.n?.toLowerCase().includes('energ'))?.e||undefined,
   };
-  const fre={divida_bruta:gv('f-db',52924),divida_me_pct:64,divida_brl_pct:36,taxa_usd:6.42,taxa_brl:17.05,taxa_eur:3.53,contingencias:47419,hedge_usd_bi:7.9,covenants_ok:true,vencimentos:{'2026':gv('f-v26',10523),'2027':7806,'2028':11401,'2029':2474,'2030':5952,'2031':6605,'apos_2031':8831},composicao_divida:dividas};
+  // FRE — 100% baseado nos campos preenchidos pelo usuário
+  const _db = gv('f-db',0);
+  const _venc26 = gv('f-v26',0);
+  const _pct_me = gv('f-pme',0)||0;
+  const _pct_brl = 100 - _pct_me;
+  const fre={
+    divida_bruta: _db||undefined,
+    divida_me_pct: _pct_me,
+    divida_brl_pct: _pct_brl,
+    taxa_usd: gv('f-tusd',0)||undefined,
+    taxa_brl: gv('f-tbrl',0)||undefined,
+    covenants_ok: true,
+    vencimentos: _venc26 ? {'2026': _venc26} : {},
+    composicao_divida: dividas,
+  };
   const mac={
     usd_brl:parseFloat(document.getElementById('i-usd').value)||5.80,selic:parseFloat(document.getElementById('i-sel').value)||14.75,
     ipca:parseFloat(document.getElementById('i-ipc').value)||5.00,cdi:parseFloat(document.getElementById('i-cdi').value)||14.65,
-    minerio_fe:102,hrc:575,treasury_10y:parseFloat(document.getElementById('i-t10').value)||4.30,spread_alvo:parseInt(document.getElementById('i-spd').value)||425,
+    minerio_fe:parseFloat(document.getElementById('i-mfe')?.value)||undefined,hrc:parseFloat(document.getElementById('i-hrc')?.value)||undefined,treasury_10y:parseFloat(document.getElementById('i-t10').value)||4.30,spread_alvo:parseInt(document.getElementById('i-spd').value)||425,
     empresa_nome:document.getElementById('f-nome').value||'Empresa',empresa_ticker:tk,empresa_segmentos:document.getElementById('f-segs').value||'',
-    empresa_database:document.getElementById('f-dt').value||'31/12/2025',empresa_cnpj:document.getElementById('f-cnpj').value||'',
+    empresa_database:document.getElementById('f-dt').value||'',empresa_cnpj:document.getElementById('f-cnpj').value||'',
     recomendacao:document.getElementById('f-reco').value||'MANTER',rating:document.getElementById('f-rat-gl').value||'B1/BB-',
     rating_br:document.getElementById('f-rat-br').value||'brBB',tese_resumo:document.getElementById('f-tese').value||'',setor:_setor||'',
   };
@@ -1010,10 +1034,12 @@ async function carregarNoticias(ticker){
   const tag = document.getElementById('news-tag');
   body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--teal)">⏳ Buscando notícias...</div>`;
   try{
-    const r = await fetch(`/api/noticias/${ticker}`);
+    const nome = encodeURIComponent(document.getElementById('f-nome').value||ticker);
+    const r = await fetch(`/api/noticias/${ticker}?nome=${nome}`);
     const d = await r.json();
     if(!d.noticias || !d.noticias.length){
-      body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">Nenhuma notícia encontrada.</div>`;
+      const av = d.aviso || 'Nenhuma notícia encontrada.';
+      body.innerHTML = `<div style="padding:10px;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text3)">${av}</div>`;
       return;
     }
     tag.textContent = `${d.noticias.length} notícias`;

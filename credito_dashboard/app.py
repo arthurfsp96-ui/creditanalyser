@@ -66,55 +66,126 @@ def fv(text, patterns, default=None):
     return default
 
 def parse_dfp(text):
-    """Extrai dados da DFP. Retorna None para campos não encontrados (sem defaults CSN)."""
+    """Extrai dados de DFP/ITR/Release de resultados.
+    Suporta formatos CVM, tabular e narrativo em português e inglês.
+    Campos não encontrados retornam None (sem defaults de outras empresas).
+    """
     d = {}
-    if not text or len(text) < 100:
-        return d  # texto vazio — campos ficarão None
+    if not text or len(text) < 50:
+        return d
 
-    # Receita líquida
+    # Receita Líquida
     d['receita_liquida'] = fv(text, [
         r'Receita\s+[Ll]íquida\s+de\s+[Vv]endas[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
         r'Receita\s+[Ll]íquida[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+        r'Receita\s+Operacional\s+Líquida[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+        r'Net\s+Revenue[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
     ])
-    d['lucro_bruto'] = fv(text, [r'[Ll]ucro\s+[Bb]ruto[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
-    d['resultado_financeiro'] = fv(text, [r'[Rr]esultado\s+[Ff]inanceiro[^\d]*(-?\d{1,3}(?:\.\d{3})*,\d+)'])
-    d['lucro_liquido'] = fv(text, [r'[Pp]rejuízo\s+[Ll]íquido[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
-    if d['lucro_liquido'] and d['lucro_liquido'] > 0:
-        d['lucro_liquido'] = -d['lucro_liquido']
 
-    # EBITDA
-    m_eb = re.search(r'EBITDA\s+Ajustado.*?R\$\s*([\d,\.]+)\s*bilh', text, re.IGNORECASE|re.DOTALL)
-    if m_eb:
-        v = sf(m_eb.group(1))
-        d['ebitda_ajustado'] = v*1000 if v and v < 100 else v
-    else:
-        d['ebitda_ajustado'] = fv(text, [r'EBITDA[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
+    # Lucro Bruto
+    d['lucro_bruto'] = fv(text, [
+        r'Lucro\s+Bruto[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Gross\s+Profit[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
 
-    # Margens (calculadas se tiver os dados)
-    if d.get('ebitda_ajustado') and d.get('receita_liquida'):
+    # Resultado Financeiro
+    d['resultado_financeiro'] = fv(text, [
+        r'Resultado\s+Financeiro[^\d]*(-?\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Receitas?\s+\(Despesas?\)\s+Financeiras?[^\d]*(-?\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+
+    # Lucro/Prejuízo Líquido
+    ll_v = fv(text, [
+        r'Lucro\s+(?:Líquido|Liquido)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Prejuízo\s+(?:Líquido|Liquido)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Net\s+(?:Income|Profit|Loss)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    if ll_v and re.search(r'[Pp]rejuízo', text[:2000]):
+        ll_v = -abs(ll_v)
+    d['lucro_liquido'] = ll_v
+
+    # EBITDA — várias formas
+    eb = None
+    m = re.search(r'EBITDA\s*(?:Ajustado)?[^\d]*R\$\s*([\d,\.]+)\s*bilh', text, re.IGNORECASE)
+    if m:
+        v = sf(m.group(1))
+        eb = v*1000 if v and v < 500 else v
+    if not eb:
+        eb = fv(text, [
+            r'EBITDA\s+(?:Ajustado|Ajust\.?)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+            r'EBITDA[^\n\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        ])
+    d['ebitda_ajustado'] = eb
+
+    # Margens calculadas
+    if d.get('ebitda_ajustado') and d.get('receita_liquida') and d['receita_liquida'] > 0:
         d['margem_ebitda'] = round(d['ebitda_ajustado'] / d['receita_liquida'] * 100, 1)
-    if d.get('lucro_bruto') and d.get('receita_liquida'):
+    if d.get('lucro_bruto') and d.get('receita_liquida') and d['receita_liquida'] > 0:
         d['margem_bruta'] = round(d['lucro_bruto'] / d['receita_liquida'] * 100, 1)
 
     # Dívida e caixa
-    d['divida_liquida'] = fv(text, [r'[Dd]ívida\s+[Ll]íquida[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
-    d['caixa'] = fv(text, [r'[Cc]aixa.*?R\$\s*([\d,]+)\s*bilh'])
+    d['divida_liquida'] = fv(text, [
+        r'[Dd]ívida\s+[Ll]íquida[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Net\s+Debt[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['divida_bruta'] = fv(text, [
+        r'[Dd]ívida\s+[Bb]ruta[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Ee]mpréstimos\s+e\s+[Ff]inanciamentos[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['caixa'] = fv(text, [
+        r'[Cc]aixa\s+e\s+[Ee]quivalentes[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Cc]aixa\s+[Gg]erencial[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Cash\s+and\s+[Ee]quivalents[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
     if d.get('caixa') and d['caixa'] < 200: d['caixa'] *= 1000
+
+    # Balanço
+    d['patrimonio_liquido'] = fv(text, [
+        r'[Pp]atrimônio\s+[Ll]íquido[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Total\s+do\s+[Pp]atrimônio[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['ativo_total'] = fv(text, [
+        r'Total\s+do\s+[Aa]tivo[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Total\s+[Aa]ssets[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['passivo_circulante'] = fv(text, [
+        r'[Pp]assivo\s+[Cc]irculante[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Current\s+[Ll]iabilities[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['ativo_circulante'] = fv(text, [
+        r'[Aa]tivo\s+[Cc]irculante[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Current\s+[Aa]ssets[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
 
     # Alavancagem
     if d.get('divida_liquida') and d.get('ebitda_ajustado') and d['ebitda_ajustado'] > 0:
         d['alavancagem'] = round(d['divida_liquida'] / d['ebitda_ajustado'], 2)
     else:
-        d['alavancagem'] = fv(text, [r'(\d+[,\.]\d+)\s*x.*?EBITDA'])
+        d['alavancagem'] = fv(text, [
+            r'(\d+[,\.]\d+)\s*[xX]\s*(?:DL/EBITDA|Dívida)',
+            r'(?:DL/EBITDA|alavancagem)[^\d]*(\d+[,\.]\d+)',
+        ])
 
-    # FCO e Capex
-    d['fco'] = fv(text, [r'[Ff]luxo.*?[Oo]peracional.*?(-?\d{1,3}(?:\.\d{3})*,\d+)'])
-    d['capex'] = fv(text, [r'[Ii]nvestimentos.*?totalizaram.*?R\$\s*([\d,]+)\s*bilh'])
+    # Fluxo de Caixa
+    d['fco'] = fv(text, [
+        r'[Ff]luxo\s+de\s+[Cc]aixa\s+(?:das\s+)?[Oo]pera[^\d]*(-?\d{1,3}(?:\.\d{3})*,\d+)',
+        r'(?:FCO|FCF)[^\d]*(-?\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['capex'] = fv(text, [
+        r'[Cc]apex[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Ii]nvestimentos[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Capital\s+[Ee]xpenditures?[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
     if d.get('capex') and d['capex'] < 100: d['capex'] *= 1000
-    d['juros_pagos'] = fv(text, [r'[Jj]uros\s+(?:pagos|incorridos)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
-    d['resultado_fin_bruto'] = fv(text, [r'[Dd]espesas?\s+[Ff]inanceiras[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)'])
-
+    d['juros_pagos'] = fv(text, [
+        r'[Jj]uros\s+(?:pagos|incorridos)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Ee]ncargos\s+[Ff]inanceiros[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    d['resultado_fin_bruto'] = fv(text, [
+        r'[Dd]espesas?\s+[Ff]inanceiras[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
     d['volume_mineracao_mt'] = 0
+    d['_campos_extraidos'] = sum(1 for v in d.values() if v is not None and str(v) not in ('0',''))
     return d
 
 def parse_fre(text):
@@ -221,180 +292,164 @@ def make_hf(macro):
 
 
 def draw_cover(canvas, doc, dfp, fre, macro):
+    """Capa do relatório — layout fixo sem sobreposição."""
     canvas.saveState()
-    # Fundo superior navy
+
+    # ── Variáveis locais
+    eb    = dfp.get('ebitda_ajustado') or 0
+    dl    = dfp.get('divida_liquida') or 0
+    rl    = dfp.get('receita_liquida') or 0
+    caixa = dfp.get('caixa') or 0
+    ll    = dfp.get('lucro_liquido') or 0
+    mg_eb = dfp.get('margem_ebitda') or (round(eb/rl*100,1) if rl else 0)
+    alav  = dfp.get('alavancagem') or (round(dl/eb,2) if eb > 0 else 0)
+    venc_cp = (fre.get('vencimentos') or {}).get('2026') or 0
+
+    # ── Blocos de fundo
     canvas.setFillColor(NAVY)
-    canvas.rect(0, PAGE_H*0.44, PAGE_W, PAGE_H*0.56, fill=1, stroke=0)
-    # Linha accent
+    canvas.rect(0, PAGE_H*0.52, PAGE_W, PAGE_H*0.48, fill=1, stroke=0)
     canvas.setFillColor(ACCENT)
-    canvas.rect(0, PAGE_H*0.44, PAGE_W, 0.35*cm, fill=1, stroke=0)
-    # Fundo inferior branco
-    canvas.setFillColor(colors.white)
-    canvas.rect(0, 0, PAGE_W, PAGE_H*0.44, fill=1, stroke=0)
+    canvas.rect(0, PAGE_H*0.52, PAGE_W, 0.3*cm, fill=1, stroke=0)
+    canvas.setFillColor(HexColor('#F8FAFC'))
+    canvas.rect(0, 0, PAGE_W, PAGE_H*0.52, fill=1, stroke=0)
 
-    # Grid lines decorativas
-    canvas.setStrokeColor(HexColor('#1a3a70'))
-    canvas.setLineWidth(0.3)
-    for i in range(8):
-        x = ML + i*(PAGE_W-ML-MR)/7
-        canvas.line(x, PAGE_H*0.44, x, PAGE_H)
+    # ── Área superior — identidade
+    canvas.setFillColor(HexColor('#64748B'))
+    canvas.setFont('Helvetica', 8)
+    canvas.drawString(ML, PAGE_H*0.92, 'ANÁLISE DE CRÉDITO CORPORATIVO — CONFIDENCIAL')
 
-    # Título
-    canvas.setFillColor(HexColor('#94A3B8'))
-    canvas.setFont('Helvetica', 9)
-    canvas.drawString(ML, PAGE_H*0.90, f"ANÁLISE DE CRÉDITO — {macro.get('empresa_ticker','').upper()}")
     canvas.setFillColor(colors.white)
-    canvas.setFont('Helvetica-Bold', 26)
     canvas.setFont('Helvetica-Bold', 22)
-    canvas.drawString(ML, PAGE_H*0.80, macro.get('empresa_nome','Empresa')[:40])
+    # Nome da empresa — truncar se muito longo
+    nm = macro.get('empresa_nome','Empresa')
+    canvas.drawString(ML, PAGE_H*0.84, nm[:45])
+
     canvas.setFont('Helvetica', 9)
     canvas.setFillColor(HexColor('#7DD3FC'))
-    canvas.drawString(ML, PAGE_H*0.71, f"{macro.get('empresa_ticker','TICK3')}  ·  B3   |   {macro.get('empresa_segmentos','Segmentos da empresa')}")
+    tk = macro.get('empresa_ticker','')
+    seg = macro.get('empresa_segmentos','')
+    canvas.drawString(ML, PAGE_H*0.78, f"{tk}  ·  B3" + (f"   |   {seg[:60]}" if seg else ''))
+
     canvas.setFillColor(HexColor('#94A3B8'))
-    canvas.setFont('Helvetica', 8)
-    canvas.drawString(ML, PAGE_H*0.67, f"Data-base: {macro.get('empresa_database','31/12/2025')}   |   USD/BRL: R$ {macro['usd_brl']:.2f}   |   Selic: {macro['selic']:.2f}%   |   IPCA: {macro['ipca']:.2f}%")
+    canvas.setFont('Helvetica', 7.5)
+    canvas.drawString(ML, PAGE_H*0.74,
+        f"Data-base: {macro.get('empresa_database','')}   |   "
+        f"USD/BRL: R$ {macro.get('usd_brl',5.80):.2f}   |   "
+        f"Selic: {macro.get('selic',14.75):.2f}%   |   "
+        f"IPCA: {macro.get('ipca',5.0):.2f}%")
 
-    # ── Badges de recomendação
-    alav = dfp.get('alavancagem', 3.47)
-    by = PAGE_H*0.48
-    # Badge 1 RECOMENDAÇÃO
-    canvas.setFillColor(ACCENT)
-    canvas.roundRect(ML, by, 108, 40, 5, fill=1, stroke=0)
-    canvas.setFillColor(colors.white)
-    canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+54, by+31, 'RECOMENDAÇÃO')
-    canvas.setFont('Helvetica-Bold', 16)
-    canvas.drawCentredString(ML+54, by+16, macro.get('recomendacao','MANTER'))
-    canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+54, by+6, 'Bonds 2026–2028')
-    # Badge 2 RATING
-    canvas.setFillColor(STEEL)
-    canvas.roundRect(ML+114, by, 100, 40, 5, fill=1, stroke=0)
-    canvas.setFillColor(colors.white)
-    canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+164, by+31, 'RATING IMPLÍCITO')
-    canvas.setFont('Helvetica-Bold', 16)
-    canvas.drawCentredString(ML+164, by+16, macro.get('rating','B1/BB-'))
-    canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+164, by+6, 'Estimado')
-    # Badge 3 ALAVANCAGEM
-    alav_col = RED_NEG if alav > 4.0 else ORANGE if alav > 3.0 else GREEN_POS
-    canvas.setFillColor(alav_col)
-    canvas.roundRect(ML+220, by, 92, 40, 5, fill=1, stroke=0)
-    canvas.setFillColor(colors.white)
-    canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+266, by+31, 'DL / EBITDA')
-    canvas.setFont('Helvetica-Bold', 18)
-    canvas.drawCentredString(ML+266, by+15, f'{alav:.2f}x')
-    # Badge 4 SPREAD
-    canvas.setFillColor(GOLD)
-    canvas.roundRect(ML+318, by, 112, 40, 5, fill=1, stroke=0)
-    canvas.setFillColor(NAVY)
-    canvas.setFont('Helvetica', 7)
-    canvas.drawCentredString(ML+374, by+31, 'SPREAD ALVO (bps)')
-    canvas.setFont('Helvetica-Bold', 16)
-    canvas.drawCentredString(ML+374, by+16, f"{macro.get('spread_alvo',425)} bps")
-    canvas.setFont('Helvetica', 7)
-    _spd = macro.get('spread_alvo',425)
-    canvas.drawCentredString(ML+374, by+6, f'Yield ~{macro["treasury_10y"]+_spd/100:.2f}% USD')
+    # ── 4 badges no limite superior/inferior
+    by = PAGE_H*0.535
+    bw, bh = 104, 38
+    gap = (PAGE_W - ML - MR - 4*bw) / 3
 
-    # ── KPI strip
-    kpis = [
-        (f"R$ {dfp.get('receita_liquida',0)/1000:.1f}bi" if dfp.get('receita_liquida') else '—', 'Receita Líquida', GREEN_POS),
-        (f"R$ {dfp.get('ebitda_ajustado',0)/1000:.1f}bi" if dfp.get('ebitda_ajustado') else '—', 'EBITDA Ajustado', GREEN_POS),
-        (f"{dfp.get('margem_ebitda',0):.1f}%" if dfp.get('margem_ebitda') else '—', 'Margem EBITDA Aj.', GREEN_POS),
-        (f"R$ {dfp.get('divida_liquida',0)/1000:.1f}bi" if dfp.get('divida_liquida') else '—', 'Dívida Líquida', ORANGE),
-        (f"R$ {dfp.get('caixa',0)/1000:.1f}bi" if dfp.get('caixa') else '—', 'Caixa Gerencial', STEEL),
-        (f"R$ {abs(dfp.get('lucro_liquido',0))/1000:.1f}bi" if dfp.get('lucro_liquido') else '—', 'Resultado Líquido', RED_NEG),
+    badges = [
+        (ACCENT,       colors.white, 'RECOMENDAÇÃO',    macro.get('recomendacao','—'),     ''),
+        (STEEL,        colors.white, 'RATING GLOBAL',   macro.get('rating','—'),           'Estimado'),
+        (ORANGE if alav > 3 else GREEN_POS, colors.white, 'DL / EBITDA',
+         f'{alav:.2f}x' if alav else '—', 'Alavancagem'),
+        (GOLD,         NAVY,         'SPREAD ALVO',
+         f"{macro.get('spread_alvo',425)} bps",
+         f"Yield ~{macro.get('treasury_10y',4.3)+macro.get('spread_alvo',425)/100:.2f}% USD"),
     ]
-    kpi_y = PAGE_H*0.35
-    kw = (PAGE_W - ML - MR - 5) / 6
-    for i, (val, lbl, col) in enumerate(kpis):
-        x = ML + i*(kw+1)
-        canvas.setFillColor(HexColor('#F8FAFC'))
-        canvas.rect(x, kpi_y, kw, 34, fill=1, stroke=0)
-        canvas.setFillColor(col)
-        canvas.rect(x, kpi_y+31, kw, 3, fill=1, stroke=0)
-        canvas.setFillColor(col)
-        canvas.setFont('Helvetica-Bold', 10)
-        canvas.drawCentredString(x+kw/2, kpi_y+18, val)
-        canvas.setFillColor(GRAY_MID)
+    for i, (bg, fg, lbl, val, sub) in enumerate(badges):
+        x = ML + i*(bw + gap)
+        canvas.setFillColor(bg)
+        canvas.roundRect(x, by, bw, bh, 4, fill=1, stroke=0)
+        canvas.setFillColor(fg)
         canvas.setFont('Helvetica', 6.5)
-        wrds = lbl.split()
-        if len(wrds) > 2:
-            canvas.drawCentredString(x+kw/2, kpi_y+9, ' '.join(wrds[:2]))
-            canvas.drawCentredString(x+kw/2, kpi_y+3, ' '.join(wrds[2:]))
-        else:
-            canvas.drawCentredString(x+kw/2, kpi_y+7, lbl)
+        canvas.drawCentredString(x+bw/2, by+29, lbl)
+        canvas.setFont('Helvetica-Bold', 14)
+        canvas.drawCentredString(x+bw/2, by+16, str(val)[:12])
+        if sub:
+            canvas.setFont('Helvetica', 6)
+            canvas.drawCentredString(x+bw/2, by+6, sub[:20])
+
+    # ── KPI strip (6 boxes)
+    ky = PAGE_H*0.415
+    kpis = [
+        (f"R$ {rl/1000:.1f}bi"    if rl    else '—', 'Receita Líquida',  STEEL),
+        (f"R$ {eb/1000:.1f}bi"    if eb    else '—', 'EBITDA Ajustado',  GREEN_POS),
+        (f"{mg_eb:.1f}%"          if mg_eb else '—', 'Mg. EBITDA',       GREEN_POS),
+        (f"R$ {dl/1000:.1f}bi"    if dl    else '—', 'Dívida Líquida',   ORANGE),
+        (f"R$ {caixa/1000:.1f}bi" if caixa else '—', 'Caixa',            STEEL),
+        (f"R$ {ll/1000:.1f}bi"    if ll    else '—', 'Resultado Líq.',   RED_NEG if ll < 0 else GREEN_POS),
+    ]
+    kw2 = (PAGE_W - ML - MR - 5) / 6
+    for i, (val, lbl, col) in enumerate(kpis):
+        x = ML + i*(kw2+1)
+        canvas.setFillColor(colors.white)
+        canvas.rect(x, ky, kw2, 30, fill=1, stroke=0)
+        canvas.setFillColor(col)
+        canvas.rect(x, ky+27, kw2, 3, fill=1, stroke=0)
+        canvas.setFillColor(col)
+        canvas.setFont('Helvetica-Bold', 9.5)
+        canvas.drawCentredString(x+kw2/2, ky+14, val)
+        canvas.setFillColor(GRAY_MID)
+        canvas.setFont('Helvetica', 6)
+        canvas.drawCentredString(x+kw2/2, ky+5, lbl)
 
     # ── Tese resumida
-    canvas.setFillColor(NAVY)
-    canvas.setFont('Helvetica-Bold', 8)
-    canvas.drawString(ML, PAGE_H*0.31, '▌ TESE EM RESUMO')
-    canvas.setFillColor(GRAY_DARK)
-    canvas.setFont('Helvetica', 7.8)
-    ebitda = dfp.get('ebitda_ajustado') or 0
-    caixa = dfp.get('caixa') or 0
-    venc_2026 = fre.get('vencimentos', {}).get('2026') or 0
-    tese_usuario = macro.get('tese_resumo','')
-    _nm = macro.get("empresa_nome","A empresa")
-    resumo = tese_usuario if tese_usuario else (
-        f"{_nm} — análise de crédito baseada nos documentos enviados."
-        + (f" EBITDA Ajustado: R$ {ebitda/1000:.1f}bi." if ebitda else "")
-        + (f" Alavancagem: {alav:.2f}x DL/EBITDA." if alav else "")
-        + (f" Caixa: R$ {caixa/1000:.1f}bi." if caixa else "")
-        + f" Selic {macro['selic']:.2f}%, USD/BRL R$ {macro['usd_brl']:.2f}."
-    )
-    words = resumo.split()
-    line, y = '', PAGE_H*0.285
-    max_w = PAGE_W - ML - MR
-    min_y = PAGE_H*0.235  # não ultrapassar área de premissas
-    for w in words:
-        test = (line + ' ' + w).strip()
-        if canvas.stringWidth(test, 'Helvetica', 7.8) < max_w:
-            line = test
-        else:
-            if y > min_y:
-                canvas.drawString(ML, y, line)
-            y -= 10; line = w
-    if line and y > min_y:
-        canvas.drawString(ML, y, line)
+    tese = macro.get('tese_resumo','')
+    if not tese:
+        tese = f"{nm}"
+        if eb:    tese += f" — EBITDA R$ {eb/1000:.1f}bi (mg. {mg_eb:.1f}%)."
+        if alav:  tese += f" Alavancagem {alav:.2f}x."
+        if caixa: tese += f" Caixa R$ {caixa/1000:.1f}bi" + (f", cobre {caixa/venc_cp*100:.0f}% do venc. CP." if venc_cp > 0 else ".")
+        if not any([eb, rl, dl]): tese = f"{nm} — preencha os dados financeiros no dashboard para análise completa."
 
-    # Linha separadora
-    canvas.setStrokeColor(GRAY_LIGHT)
-    canvas.setLineWidth(0.5)
-    canvas.line(ML, PAGE_H*0.225, PAGE_W-MR, PAGE_H*0.225)
-
-    # Premissas macro na capa
     canvas.setFillColor(NAVY)
     canvas.setFont('Helvetica-Bold', 7.5)
-    canvas.drawString(ML, PAGE_H*0.21, 'PREMISSAS MACROECONÔMICAS UTILIZADAS NESTE RELATÓRIO')
-    _setor_m = macro.get('setor','')
-    macros_txt = [
-        f"USD/BRL: R$ {macro['usd_brl']:.2f}",
-        f"Selic: {macro['selic']:.2f}% a.a.",
-        f"IPCA: {macro['ipca']:.2f}% a.a.",
-        f"CDI: {macro['cdi']:.2f}% a.a.",
-        f"Treasury 10Y: {macro['treasury_10y']:.2f}%",
-        f"Spread Alvo: {macro.get('spread_alvo',425)} bps",
-    ]
-    if _setor_m in ('mineracao','siderurgia'):
-        macros_txt.insert(4, f"Minério Fe: US$ {macro.get('minerio_fe',102):.0f}/t")
-    mx, my = ML, PAGE_H*0.19
+    canvas.drawString(ML, PAGE_H*0.37, '▌ TESE')
     canvas.setFillColor(GRAY_DARK)
     canvas.setFont('Helvetica', 7.5)
-    spacing = (PAGE_W - ML - MR) / len(macros_txt)
-    for i, mt in enumerate(macros_txt):
-        canvas.drawString(ML + i*spacing, my, mt)
+    # Quebrar tese em no máximo 3 linhas
+    words = tese.split()
+    lines_tese = []
+    cur = ''
+    max_w = PAGE_W - ML - MR
+    for w in words:
+        test = (cur + ' ' + w).strip()
+        if canvas.stringWidth(test, 'Helvetica', 7.5) < max_w:
+            cur = test
+        else:
+            if cur: lines_tese.append(cur)
+            cur = w
+        if len(lines_tese) >= 3: break
+    if cur and len(lines_tese) < 3: lines_tese.append(cur)
+    for j, ln in enumerate(lines_tese[:3]):
+        canvas.drawString(ML, PAGE_H*0.355 - j*10, ln)
 
-    # Disclaimer
-    canvas.setFillColor(GRAY_MID)
+    # ── Premissas (linha única)
+    canvas.setStrokeColor(GRAY_LIGHT)
+    canvas.setLineWidth(0.4)
+    canvas.line(ML, PAGE_H*0.29, PAGE_W-MR, PAGE_H*0.29)
+    canvas.setFillColor(NAVY)
+    canvas.setFont('Helvetica-Bold', 6.5)
+    canvas.drawString(ML, PAGE_H*0.275, 'PREMISSAS UTILIZADAS:')
+    mac_items = [
+        f"Selic {macro.get('selic',14.75):.2f}%",
+        f"IPCA {macro.get('ipca',5.0):.2f}%",
+        f"CDI {macro.get('cdi',14.65):.2f}%",
+        f"USD/BRL R$ {macro.get('usd_brl',5.80):.2f}",
+        f"Treasury 10Y {macro.get('treasury_10y',4.30):.2f}%",
+        f"Spread {macro.get('spread_alvo',425)} bps",
+    ]
+    canvas.setFillColor(GRAY_DARK)
     canvas.setFont('Helvetica', 6.5)
-    canvas.drawCentredString(PAGE_W/2, 1.1*cm,
-        'Documento gerado automaticamente com base em DFP/FRE enviados pelo usuário. Não constitui oferta ou recomendação formal de investimento.')
+    sp = (PAGE_W - ML - MR - 80) / (len(mac_items)-1)
+    for i, mt in enumerate(mac_items):
+        canvas.drawString(ML + 80 + i*sp if i > 0 else ML+80, PAGE_H*0.275, mt)
+
+    # ── Disclaimer
+    canvas.setFillColor(GRAY_MID)
+    canvas.setFont('Helvetica', 6)
+    canvas.drawCentredString(PAGE_W/2, 0.9*cm,
+        f"Relatório gerado em {macro.get('empresa_ticker','—')} — {macro.get('empresa_database','')} | "
+        "Não constitui oferta ou recomendação formal de investimento.")
     canvas.restoreState()
 
-# ─── CONSTRUÇÃO DO RELATÓRIO ────────────────────────────────────────────────────
+
 def gerar_pdf(dfp, fre, macro):
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
@@ -436,16 +491,21 @@ def gerar_pdf(dfp, fre, macro):
     # 1. SUMÁRIO EXECUTIVO
     # ────────────────────────────────────────────────────────────────────
     story += [P('1. SUMÁRIO EXECUTIVO', s['sh']), HR()]
-    story.append(P(
-        f'A {macro.get("empresa_nome","Empresa")} encerrou 2025 com receita líquida de R$ {rl/1000:.1f} bilhões e EBITDA Ajustado de '
-        f'R$ {eb/1000:.1f} bilhões (margem {mg_eb:.1f}% — recorde histórico, +15,3% a/a). '
-        f'O resultado financeiro '
-        f'de R$ {abs(rf)/1000:.1f} bilhões — impactado por despesas com juros de R$ {juros/1000:.1f} bilhões '
-        f'e variação cambial negativa — conduziu ao resultado líquido de R$ {ll/1000:.1f} bilhões. '
-        f'A alavancagem atingiu {alav:.2f}x Dívida Líquida/EBITDA, porém com '
-        f'caixa gerencial de R$ {caixa/1000:.1f} bilhões' + (f' cobrindo {caixa/venc_2026*100:.0f}% da dívida de curto prazo.' if venc_2026 > 0 else '.') +
-        f''
-        f'', s['body']))
+    _tese_usr = macro.get('tese_resumo','')
+    _nm_sum = macro.get('empresa_nome','A empresa')
+    _db_str = macro.get('empresa_database','')
+    if _tese_usr:
+        _txt_sum = _tese_usr
+    else:
+        _txt_sum = f'{_nm_sum}'
+        if _db_str: _txt_sum += f' — data-base {_db_str}.'
+        if eb:  _txt_sum += f' EBITDA Ajustado de R$ {eb/1000:.1f}bi (margem {mg_eb:.1f}%).'
+        if rl:  _txt_sum += f' Receita Líquida de R$ {rl/1000:.1f}bi.'
+        if alav: _txt_sum += f' Alavancagem de {alav:.2f}x DL/EBITDA.'
+        if caixa: _txt_sum += f' Caixa de R$ {caixa/1000:.1f}bi' + (f', cobrindo {caixa/venc_2026*100:.0f}% do vencimento CP.' if venc_2026 > 0 else '.')
+        if fco and fco < 0: _txt_sum += f' FCO: R$ {fco/1000:.1f}bi.'
+        if not any([eb,rl,alav]): _txt_sum += ' Dados financeiros não preenchidos — carregue o DFP/ITR para análise completa.'
+    story.append(P(_txt_sum, s['body']))
     story.append(SP(4))
 
     # Tabela KPI
@@ -1014,7 +1074,7 @@ def _load_cvm_cache():
 
 def _buscar_ticker_brapi(nome_pregao, nome_social, cod_cvm):
     """Tenta encontrar ticker via Brapi pelo nome de pregão ou CVM."""
-    BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+    BRAPI_TOKEN = os.environ.get('BRAPI_TOKEN','ucaHWHuWF7tLMv47tpzQB8')
     try:
         import requests as rq
         # Busca por nome no Brapi
@@ -1040,7 +1100,7 @@ def _buscar_dados_brapi(ticker):
     """Busca cotação e múltiplos via Brapi para um ticker."""
     if not ticker:
         return {}
-    BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+    BRAPI_TOKEN = os.environ.get('BRAPI_TOKEN','ucaHWHuWF7tLMv47tpzQB8')
     try:
         import requests as rq
         r = rq.get(f'https://brapi.dev/api/quote/{ticker}',
@@ -1191,7 +1251,7 @@ def treasury():
     """Retorna Treasury 10Y via FRED API."""
     try:
         import requests as req2
-        FRED_KEY = 'b22fa17b11e3e89d8c73dce4b08a0cd9'
+        FRED_KEY = os.environ.get('FRED_KEY','b22fa17b11e3e89d8c73dce4b08a0cd9')
         r = req2.get('https://api.stlouisfed.org/fred/series/observations',
                      params={'series_id':'DGS10','api_key':FRED_KEY,'file_type':'json',
                              'sort_order':'desc','limit':5},
@@ -1543,7 +1603,7 @@ def calcular_zscore(dfp_data, market_cap_bi=None):
 def get_peers(ticker):
     """Busca peers do mesmo setor e retorna dados comparativos via Brapi."""
     import requests as rq
-    BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+    BRAPI_TOKEN = os.environ.get('BRAPI_TOKEN','ucaHWHuWF7tLMv47tpzQB8')
     tk = ticker.upper()
     # Detectar setor
     setor = None
@@ -1623,7 +1683,7 @@ def historico_financeiro(ticker):
 
         if not cod_cvm:
             # Tentar via Brapi — retornar série histórica simplificada
-            BRAPI_TOKEN = 'ucaHWHuWF7tLMv47tpzQB8'
+            BRAPI_TOKEN = os.environ.get('BRAPI_TOKEN','ucaHWHuWF7tLMv47tpzQB8')
             r = rq.get(f'https://brapi.dev/api/quote/{tk}',
                        params={'token': BRAPI_TOKEN,
                                'modules': 'incomeStatementHistory,balanceSheetHistory,cashflowStatementHistory'},
@@ -1716,35 +1776,52 @@ def buscar_debentures(identificador):
 # ══════════════════════════════════════════════════════════════════
 @app.route('/api/noticias/<ticker>')
 def get_noticias(ticker):
-    """Busca notícias recentes via Google News RSS."""
+    """Busca notícias via Google News RSS — por ticker e nome da empresa."""
     import urllib.request, urllib.parse
     from xml.etree import ElementTree as ET
 
-    tk = ticker.upper()
+    tk = ticker.upper().strip()
+    nome = request.args.get('nome', tk)
     resultado = {'ticker': tk, 'noticias': []}
-    queries = [tk, f'{tk} resultados', f'{tk} crédito']
 
-    try:
-        q = urllib.parse.quote(f'{tk} ações bolsa')
-        url = f'https://news.google.com/rss/search?q={q}&hl=pt-BR&gl=BR&ceid=BR:pt-419'
-        req = urllib.request.Request(url, headers={'User-Agent':'Mozilla/5.0'})
-        with urllib.request.urlopen(req, timeout=10) as r:
-            xml = r.read()
-        root = ET.fromstring(xml)
-        items = root.findall('.//item')[:10]
-        for item in items:
-            titulo = item.findtext('title','')
-            link = item.findtext('link','')
-            pub = item.findtext('pubDate','')
-            fonte = item.findtext('source','')
-            resultado['noticias'].append({
-                'titulo': titulo,
-                'link': link,
-                'publicado': pub,
-                'fonte': fonte,
+    # Tentar 2 queries: ticker e nome da empresa
+    queries_raw = [
+        f'{tk} B3 resultados',
+        f'{nome} crédito debêntures' if nome != tk else f'{tk} debêntures bonds',
+    ]
+    vistas = set()
+
+    for qr in queries_raw:
+        try:
+            q = urllib.parse.quote(qr)
+            url = f'https://news.google.com/rss/search?q={q}&hl=pt-BR&gl=BR&ceid=BR:pt-419'
+            req = urllib.request.Request(url, headers={
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
             })
-    except Exception as e:
-        resultado['erro'] = str(e)
+            with urllib.request.urlopen(req, timeout=12) as r:
+                xml = r.read()
+            root = ET.fromstring(xml)
+            for item in root.findall('.//item')[:8]:
+                titulo = item.findtext('title','').split(' - ')[0].strip()
+                link   = item.findtext('link','')
+                pub    = item.findtext('pubDate','')
+                fonte  = item.findtext('source','') or item.findtext('{http://purl.org/rss/1.0/modules/content/}source','')
+                if titulo and titulo not in vistas:
+                    vistas.add(titulo)
+                    resultado['noticias'].append({
+                        'titulo': titulo,
+                        'link':   link,
+                        'publicado': pub,
+                        'fonte': fonte,
+                    })
+            if len(resultado['noticias']) >= 8:
+                break
+        except Exception as e:
+            resultado['_erro_parcial'] = str(e)
+            continue
+
+    if not resultado['noticias']:
+        resultado['aviso'] = 'Nenhuma notícia encontrada. Tente pesquisar diretamente no Google Notícias.'
 
     return jsonify(resultado)
 
@@ -1829,4 +1906,4 @@ def _salvar_relatorio(pdf_bytes, macro):
 
 if __name__ == '__main__':
     print('\n🚀  Dashboard Análise de Crédito → http://localhost:5000\n')
-    app.run(debug=True, port=5000)
+    app.run(debug=os.environ.get('FLASK_DEBUG','0')=='1', port=int(os.environ.get('PORT',5000)))
