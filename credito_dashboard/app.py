@@ -184,6 +184,58 @@ def parse_dfp(text):
     d['resultado_fin_bruto'] = fv(text, [
         r'[Dd]espesas?\s+[Ff]inanceiras[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
     ])
+    # Lucros/Prejuízos acumulados (necessário para Altman Z e Piotroski)
+    d['lucros_retidos'] = fv(text, [
+        r'[Ll]ucros\s+(?:[Aa]cumulados|[Rr]etidos)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Pp]rejuízos?\s+[Aa]cumulados[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Reservas\s+de\s+[Ll]ucros[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # Ativo não circulante (Altman)
+    d['ativo_nao_circulante'] = fv(text, [
+        r'[Aa]tivo\s+[Nn]ão[\s-][Cc]irculante[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Non[\s-][Cc]urrent\s+[Aa]ssets[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # Passivo não circulante (Piotroski — leverage)
+    d['passivo_nao_circulante'] = fv(text, [
+        r'[Pp]assivo\s+[Nn]ão[\s-][Cc]irculante[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Non[\s-][Cc]urrent\s+[Ll]iabilities[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # Custo dos Produtos Vendidos (Piotroski — gross margin)
+    d['cogs'] = fv(text, [
+        r'Custo\s+(?:dos\s+)?(?:Produtos?\s+Vendidos?|das\s+Mercadorias?|dos\s+Serviços?)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Cost\s+of\s+(?:Revenue|Goods\s+Sold)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'CPV[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # Ações em circulação
+    d['acoes_emitidas'] = fv(text, [
+        r'[Aa]ções?\s+[Ee]mitidas?[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+        r'[Ss]hares?\s+[Oo]utstanding[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+        r'[Qq]uantidade\s+de\s+[Aa]ções?[^\d]*(\d{1,3}(?:\.\d{3})*(?:,\d+)?)',
+    ])
+    # Dividendos pagos (sustentabilidade)
+    d['dividendos_pagos'] = fv(text, [
+        r'[Dd]ividendos\s+(?:[Pp]agos?|[Dd]istribuídos?)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'[Pp]agamento\s+de\s+[Dd]ividendos[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Dividends\s+[Pp]aid[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # Depreciação e amortização (para EBITDA estimado se não explícito)
+    d['depreciacao'] = fv(text, [
+        r'[Dd]epreciação\s+e\s+[Aa]mortização[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'D&A[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Depreciation[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # EBIT (Resultado Operacional)
+    d['ebit'] = fv(text, [
+        r'(?:Resultado|Lucro)\s+(?:Antes\s+de\s+)?(?:IR|Juros|LAJIR|Operacional)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'EBIT[^DA][^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+        r'Operating\s+(?:Income|Profit)[^\d]*(\d{1,3}(?:\.\d{3})*,\d+)',
+    ])
+    # Se EBIT calculável e EBITDA não encontrado, estimar
+    if not d.get('ebitda_ajustado') and d.get('ebit') and d.get('depreciacao'):
+        d['ebitda_ajustado'] = (d['ebit'] or 0) + (d['depreciacao'] or 0)
+        if d.get('receita_liquida') and d['receita_liquida'] > 0:
+            d['margem_ebitda'] = round(d['ebitda_ajustado'] / d['receita_liquida'] * 100, 1)
+
     d['volume_mineracao_mt'] = 0
     d['_campos_extraidos'] = sum(1 for v in d.values() if v is not None and str(v) not in ('0',''))
     return d
@@ -644,11 +696,11 @@ def gerar_pdf(dfp, fre, macro):
                P('EBITDA Aj. (R$ mi)', s['th']), P('Mg. EBITDA', s['th']), P('Destaque', s['th'])]
     # Segmentos: usar dados do usuário, ignorar segmentos sem receita
     _segs_raw = [
-        (dfp.get('seg1_nome') or None, dfp.get('receita_siderurgia') or dfp.get('receita_seg1'), dfp.get('ebitda_siderurgia') or dfp.get('ebitda_seg1')),
-        (dfp.get('seg2_nome') or None, dfp.get('receita_mineracao') or dfp.get('receita_seg2'),  dfp.get('ebitda_mineracao') or dfp.get('ebitda_seg2')),
-        (dfp.get('seg3_nome') or None, dfp.get('receita_cimentos') or dfp.get('receita_seg3'),   dfp.get('ebitda_cimentos') or dfp.get('ebitda_seg3')),
-        (dfp.get('seg4_nome') or None, dfp.get('receita_logistica') or dfp.get('receita_seg4'),  dfp.get('ebitda_logistica') or dfp.get('ebitda_seg4')),
-        (dfp.get('seg5_nome','') or dfp.get('receita_energia') and 'Energia',      dfp.get('receita_energia'),     dfp.get('ebitda_energia')),
+        (dfp.get('seg1_nome') or None, dfp.get('receita_seg1'), dfp.get('ebitda_seg1')),
+        (dfp.get('seg2_nome') or None, dfp.get('receita_seg2'), dfp.get('ebitda_seg2')),
+        (dfp.get('seg3_nome') or None, dfp.get('receita_seg3'), dfp.get('ebitda_seg3')),
+        (dfp.get('seg4_nome') or None, dfp.get('receita_seg4'), dfp.get('ebitda_seg4')),
+        (dfp.get('seg5_nome') or None, dfp.get('receita_seg5'), dfp.get('ebitda_seg5')),
     ]
     segs = [(nm, rc or 0, eb or 0, '') for nm, rc, eb in _segs_raw if nm and rc and rc > 0]
     if not segs:
@@ -688,8 +740,14 @@ def gerar_pdf(dfp, fre, macro):
     story.append(P('4.1 Cronograma de Vencimentos', s['ssh']))
     vh = [P('Ano', s['th']), P('Total (R$ mi)', s['th']), P('% Dív. Bruta', s['th']),
           P('ME (R$ mi)', s['th']), P('BRL (R$ mi)', s['th']), P('Observação', s['th'])]
-    me_split = {'2026':(7909,2614),'2027':(3890,3915),'2028':(8891,2510),
-                '2029':(565,1910),'2030':(4319,1632),'2031':(5145,1460),'apos_2031':(3178,5653)}
+    # Calcular divisão ME/BRL dinamicamente a partir dos dados do FRE
+    _pct_me_v = fre.get('divida_me_pct') or 0
+    _pct_brl_v = fre.get('divida_brl_pct') or (100 - _pct_me_v)
+    def _calc_me_brl(v, pct_me):
+        me = round(v * pct_me / 100) if pct_me > 0 else 0
+        brl = v - me
+        return (me, brl)
+    me_split = {}  # Dinâmico: calculado por vencimento abaixo
     venc_order = ['2026','2027','2028','2029','2030','2031','apos_2031']
     obs = {'2026':'⚠ CRÍTICO — coberto pelo caixa','2027':'Refinanciamento possível','2028':'⚠ MAIOR pico de amortização',
            '2029':'Gerenciável','2030':'Bonds de longo prazo','2031':'Longo prazo','apos_2031':'Bonds perpétuos / longo'}
@@ -697,14 +755,16 @@ def gerar_pdf(dfp, fre, macro):
     vrows = []
     for i, ano in enumerate(venc_order):
         val = venc.get(ano, 0)
-        me_v, brl_v = me_split.get(ano, (0,0))
+        me_v, brl_v = _calc_me_brl(val, _pct_me_v)  # Calculado dinamicamente pelo % ME do FRE
         lbl = 'Após 2031' if ano == 'apos_2031' else ano
         pct = val/db*100 if db else 0
         vrows.append([lbl, f'{val:,.0f}', f'{pct:.1f}%', f'{me_v:,.0f}', f'{brl_v:,.0f}', obs[ano]])
         if ano in ('2026','2028'): vrc.append(('BACKGROUND',(0,i+1),(-1,i+1), HexColor('#FEE2E2')))
         elif ano == '2027': vrc.append(('BACKGROUND',(0,i+1),(-1,i+1), HexColor('#FEF3C7')))
     total_v = sum(venc.get(k,0) for k in venc_order)
-    vrows.append(['TOTAL', f'{total_v:,.0f}', '100%', '33.897', '19.695', ''])
+    total_me = sum(_calc_me_brl(venc.get(k,0), _pct_me_v)[0] for k in venc_order)
+    total_brl = sum(_calc_me_brl(venc.get(k,0), _pct_me_v)[1] for k in venc_order)
+    vrows.append(['TOTAL', f'{total_v:,.0f}', '100%', f'{total_me:,.0f}', f'{total_brl:,.0f}', ''])
     vrc.append(('BACKGROUND',(0,len(vrows)),(-1,len(vrows)), HexColor('#EFF6FF')))
     vrc.append(('FONTNAME',(0,len(vrows)),(-1,len(vrows)),'Helvetica-Bold'))
     vd = [vh] + [[P(r[0],s['tlb'] if 'TOTAL' in r[0] else s['tl'])] + [P(r[j],s['tc']) for j in range(1,5)] + [P(r[5],s['tl'])] for r in vrows]
@@ -1025,6 +1085,112 @@ def gerar_pdf(dfp, fre, macro):
     story.append(tbl(gt_d, [W*0.17, W*0.42, W*0.18, W*0.23], gt_rc))
     story.append(SP(6))
 
+    # ────────────────────────────────────────────────────────────────────
+    # 8. ANÁLISE QUANTITATIVA AVANÇADA
+    # ────────────────────────────────────────────────────────────────────
+    _pf = macro.get('_piotroski') or {}
+    _dscr_d = macro.get('_dscr') or {}
+    _div_s = macro.get('_dividend_sust') or {}
+
+    if _pf or _dscr_d:
+        story.append(PageBreak())
+        story += [P('8. ANÁLISE QUANTITATIVA AVANÇADA', s['sh']), HR()]
+        story.append(P(
+            'Esta seção apresenta modelos quantitativos globalmente reconhecidos usados por analistas de crédito e investidores '
+            'institucionais para complementar a análise qualitativa. Os resultados são calculados automaticamente a partir '
+            'dos dados extraídos dos documentos enviados.', s['body']))
+        story.append(SP(4))
+
+        # ── Piotroski F-Score ──
+        if _pf:
+            story.append(P('8.1 Piotroski F-Score (Qualidade Financeira)', s['ssh']))
+            story.append(P(
+                f"O F-Score de Joseph Piotroski (2000) avalia a qualidade financeira da empresa em 9 critérios binários "
+                f"distribuídos em 3 pilares. Score atual: <b>{_pf.get('f_score', '—')}/9 — {_pf.get('qualidade','—')}</b>. "
+                f"{_pf.get('interpretacao','')}",
+                s['body']))
+            story.append(SP(3))
+
+            pf_hdr = [P('Critério', s['th']), P('Pilar', s['th']), P('Valor', s['th']), P('Ponto', s['th'])]
+            pilar_nomes = {
+                'F1_ROA': 'Rentabilidade', 'F2_FCO': 'Rentabilidade',
+                'F3_DELTA_ROA': 'Rentabilidade', 'F4_ACCRUAL': 'Rentabilidade',
+                'F5_LEVER': 'Alavancagem/Liq.', 'F6_LIQUID': 'Alavancagem/Liq.',
+                'F7_SHARES': 'Alavancagem/Liq.',
+                'F8_GROSS_MG': 'Ef. Operacional', 'F9_ASSET_TURN': 'Ef. Operacional',
+            }
+            pf_rows = []
+            cor_pf = []
+            for i, det in enumerate(_pf.get('detalhes', [])):
+                pnt = det.get('ponto', 0)
+                crit_key = list((_pf.get('pontos') or {}).keys())[i] if i < len(_pf.get('pontos',{})) else ''
+                pf_rows.append([det.get('criterio',''), pilar_nomes.get(crit_key,''),
+                                 det.get('valor',''), '✓' if pnt else '✗'])
+                bg = HexColor('#DCFCE7') if pnt else HexColor('#FEE2E2')
+                cor_pf.append(('BACKGROUND',(3,i+1),(3,i+1), bg))
+                cor_pf.append(('TEXTCOLOR',(3,i+1),(3,i+1), GREEN_POS if pnt else RED_NEG))
+                cor_pf.append(('FONTNAME',(3,i+1),(3,i+1),'Helvetica-Bold'))
+            # Total
+            pf_rows.append(['TOTAL F-SCORE', '9 critérios', '',
+                             f"{_pf.get('f_score','—')}/9"])
+            cor_pf.append(('BACKGROUND',(0,len(pf_rows)),(-1,len(pf_rows)), HexColor('#EFF6FF')))
+            cor_pf.append(('FONTNAME',(0,len(pf_rows)),(-1,len(pf_rows)),'Helvetica-Bold'))
+
+            pf_data = [pf_hdr] + [[P(r[j], s['tl'] if j<2 else s['tc']) for j in range(4)] for r in pf_rows]
+            story.append(tbl(pf_data, [W*0.44, W*0.20, W*0.22, W*0.14], cor_pf))
+            story.append(P('Fonte: Piotroski (2000), Journal of Accounting Research. Critérios calculados a partir dos documentos enviados.', s['cap']))
+            story.append(SP(5))
+
+        # ── DSCR ──
+        if _dscr_d:
+            story.append(P('8.2 DSCR — Debt Service Coverage Ratio', s['ssh']))
+            _dscr_v = _dscr_d.get('dscr', 0)
+            _dscr_nivel = _dscr_d.get('nivel','—')
+            _dscr_cor = GREEN_POS if _dscr_nivel == 'SEGURO' else (ORANGE if _dscr_nivel in ('ADEQUADO','LIMITE') else RED_NEG)
+            story.append(P(
+                f"O DSCR mede a capacidade do FCO de cobrir o serviço da dívida (juros + amortizações). "
+                f"DSCR atual: <b>{_dscr_v:.2f}x — {_dscr_nivel}</b>. {_dscr_d.get('interpretacao','')}",
+                s['body']))
+            story.append(SP(3))
+
+            dscr_hdr = [P('Componente', s['th']), P('Valor (R$ mi)', s['th']), P('Interpretação', s['th'])]
+            dscr_rows = [
+                ['FCO (Fluxo de Caixa Operacional)', f"{_dscr_d.get('fco',0):,.0f}", 'Capacidade de pagamento'],
+                ['Juros Pagos', f"{_dscr_d.get('juros_pagos',0):,.0f}", 'Encargo financeiro'],
+                ['Amortização CP', f"{_dscr_d.get('amortizacao_cp',0):,.0f}", 'Vencimento no curto prazo'],
+                ['Serviço Total da Dívida', f"{_dscr_d.get('debt_service',0):,.0f}", 'Denominador do DSCR'],
+                [f'DSCR = {_dscr_v:.3f}x', f'Nível: {_dscr_nivel}', _dscr_d.get('interpretacao','')],
+            ]
+            dscr_extra = [('BACKGROUND',(0,5),(-1,5), HexColor('#DCFCE7') if _dscr_nivel == 'SEGURO' else HexColor('#FEE2E2')),
+                         ('FONTNAME',(0,5),(-1,5),'Helvetica-Bold')]
+            dscr_data = [dscr_hdr] + [[P(r[j], s['tlb'] if j==0 else s['tc']) for j in range(3)] for r in dscr_rows]
+            story.append(tbl(dscr_data, [W*0.36, W*0.22, W*0.42], dscr_extra))
+            story.append(SP(5))
+
+        # ── Sustentabilidade de Dividendos ──
+        if _div_s and _div_s.get('nivel') != 'SEM DIVIDENDOS':
+            story.append(P('8.3 Sustentabilidade de Dividendos', s['ssh']))
+            _div_nivel = _div_s.get('nivel','—')
+            _div_score = _div_s.get('score')
+            story.append(P(
+                f"Score de sustentabilidade de dividendos: <b>{_div_score}/10 — {_div_nivel}</b>. "
+                f"{_div_s.get('interpretacao','')} "
+                + (f"Flags: {'; '.join(_div_s.get('flags',[]))}." if _div_s.get('flags') else ''),
+                s['body']))
+            story.append(SP(3))
+
+            div_hdr = [P('Indicador', s['th']), P('Valor', s['th']), P('Referência', s['th'])]
+            div_rows = [
+                ['Dividendos Pagos (R$ mi)', f"{_div_s.get('dividendos_pagos',0):,.0f}", '—'],
+                ['Payout / Lucro Líquido (%)', f"{_div_s.get('payout_lucro','—')}%", '< 100%'],
+                ['Payout / FCO (%)', f"{_div_s.get('payout_fco','—')}%", '< 80%'],
+                ['Payout / FCL (%)', f"{_div_s.get('payout_fcl','—')}%", '< 100%'],
+                ['FCL (FCO - CAPEX) (R$ mi)', f"{_div_s.get('free_cash_flow',0):,.0f}", '> Dividendos'],
+            ]
+            div_data = [div_hdr] + [[P(r[j], s['tl'] if j==0 else s['tc']) for j in range(3)] for r in div_rows]
+            story.append(tbl(div_data, [W*0.40, W*0.22, W*0.38]))
+            story.append(SP(5))
+
     story.append(HRFlowable(width='100%', thickness=0.5, color=GRAY_LIGHT, spaceAfter=3))
     story.append(P(
         f"DISCLAIMER: Este relatório sobre {macro.get('empresa_nome','a empresa')} foi gerado com base nos documentos e "
@@ -1072,15 +1238,67 @@ def _load_cvm_cache():
         pass
     return _cvm_cache
 
-def _buscar_ticker_brapi(nome_pregao, nome_social, cod_cvm):
-    """Tenta encontrar ticker via Brapi pelo nome de pregão ou CVM."""
+# Tabela de mapeamento CNPJ → Ticker (principais empresas B3)
+# Reduz dependência de busca dinâmica e aumenta precisão
+_CNPJ_TICKER_MAP = {
+    '00000000000191': 'BBAS3',  # Banco do Brasil
+    '60701190000104': 'ITUB4',  # Itaú Unibanco
+    '60746948000112': 'BBDC4',  # Bradesco
+    '90400888000142': 'BRSR6',  # Banrisul
+    '00362305000104': 'PETR4',  # Petrobras
+    '33592510000154': 'VALE3',  # Vale
+    '33650044000180': 'CSNA3',  # CSN
+    '60889128000180': 'GGBR4',  # Gerdau
+    '92702067000196': 'USIM5',  # Usiminas
+    '02558157000162': 'SUZB3',  # Suzano
+    '89637490000114': 'KLBN11', # Klabin
+    '00017677000155': 'MGLU3',  # Magazine Luiza
+    '07526557000100': 'LREN3',  # Lojas Renner
+    '45543915000181': 'WEGE3',  # WEG
+    '00395288000130': 'ABEV3',  # Ambev
+    '00805753000155': 'HAPV3',  # Hapvida
+    '00108786000165': 'RAIL3',  # Rumo Logística
+    '04196821000103': 'PRIO3',  # PetroRio
+    '21076791000116': 'CSAN3',  # Cosan
+    '09346601000125': 'RENT3',  # Localiza
+    '59056342000108': 'VIVT3',  # Telefônica Brasil
+    '04164616000158': 'TIMS3',  # TIM
+    '00001180000126': 'EGIE3',  # Engie Brasil
+    '03467321000199': 'CPFE3',  # CPFL Energia
+    '09274232000118': 'ENGI11', # Energisa
+    '60553066000161': 'CMIG4',  # Cemig
+    '07343017000195': 'CYRE3',  # Cyrela
+    '08851605000102': 'MRVE3',  # MRV Engenharia
+    '43098826000156': 'SLCE3',  # SLC Agrícola
+    '79609481000133': 'JALL3',  # Jalles Machado
+    '02316522000164': 'JBSS3',  # JBS
+    '73295854000193': 'MRFG3',  # Marfrig
+    '09512920000176': 'BEEF3',  # Minerva
+    '07960688000106': 'COGN3',  # Cogna
+    '01800019000185': 'YDUQ3',  # Ânima
+    '11598259000115': 'BBSE3',  # BB Seguridade
+    '56994502000150': 'PSSA3',  # Porto Seguro
+    '03853896000140': 'DASA3',  # DASA
+    '61189288000189': 'FLRY3',  # Fleury
+    '47508411000156': 'SANB11', # Santander Brasil
+    '61472676000169': 'BPAC11', # BTG Pactual
+    '09266298000146': 'VBBR3',  # Vibra Energia
+}
+
+def _buscar_ticker_brapi(nome_pregao, nome_social, cod_cvm, cnpj_raw=''):
+    """Tenta encontrar ticker via mapa estático (CNPJ) ou Brapi search (fallback)."""
+    # 1. Mapa estático de CNPJ → Ticker (mais rápido e confiável)
+    if cnpj_raw and cnpj_raw in _CNPJ_TICKER_MAP:
+        return _CNPJ_TICKER_MAP[cnpj_raw]
+
     BRAPI_TOKEN = os.environ.get('BRAPI_TOKEN','ucaHWHuWF7tLMv47tpzQB8')
     try:
         import requests as rq
-        # Busca por nome no Brapi
-        termos = [t for t in [nome_pregao, nome_social[:15] if nome_social else ''] if t]
+        # 2. Busca por nome no Brapi (fallback)
+        nome_pregao_limpo = (nome_pregao or '').strip()[:20]
+        termos = [t for t in [nome_pregao_limpo] if t]
         for termo in termos:
-            r = rq.get(f'https://brapi.dev/api/quote/list',
+            r = rq.get('https://brapi.dev/api/quote/list',
                        params={'search': termo, 'token': BRAPI_TOKEN},
                        timeout=8)
             if r.status_code == 200:
@@ -1092,7 +1310,7 @@ def _buscar_ticker_brapi(nome_pregao, nome_social, cod_cvm):
                             if s.get('stock','').endswith(sufixo):
                                 return s['stock']
                     return stocks[0].get('stock','')
-    except:
+    except Exception:
         pass
     return ''
 
@@ -1221,6 +1439,9 @@ def consultar_cnpj(cnpj):
 
     # ── 2. CVM — código, segmento B3, ticker ────────────────────────
     try:
+        # Tentar primeiro no mapa estático (mais rápido)
+        if raw in _CNPJ_TICKER_MAP:
+            resultado['ticker'] = _CNPJ_TICKER_MAP[raw]
         cvm = _load_cvm_cache()
         if raw in cvm:
             info = cvm[raw]
@@ -1229,8 +1450,14 @@ def consultar_cnpj(cnpj):
             resultado['categoria_cvm'] = info.get('categoria','')
             resultado['situacao_cvm'] = info.get('situacao_cvm','')
             nome_pregao = info.get('nome_pregao','') or resultado['nome_fantasia']
-            # Tentar achar ticker via Brapi
-            tk = _buscar_ticker_brapi(nome_pregao, resultado['razao_social'], info.get('cod_cvm',''))
+            if not resultado['ticker']:
+                tk = _buscar_ticker_brapi(nome_pregao, resultado['razao_social'], info.get('cod_cvm',''), raw)
+                if tk:
+                    resultado['ticker'] = tk
+        elif not resultado['ticker']:
+            # CVM não tem a empresa — tentar pelo nome (empresa de capital fechado)
+            nome_pregao = resultado.get('nome_fantasia') or resultado.get('razao_social','')
+            tk = _buscar_ticker_brapi(nome_pregao, resultado['razao_social'], '', raw)
             if tk:
                 resultado['ticker'] = tk
     except Exception as e:
@@ -1243,6 +1470,65 @@ def consultar_cnpj(cnpj):
             resultado.update({k: v for k, v in dados_mkt.items() if v not in (None, '', 0)})
         except Exception as e:
             resultado['_erro_brapi'] = str(e)
+
+    # ── 4. Dados adicionais CVM (DFP mais recente via download) ──────
+    try:
+        if resultado.get('ticker'):
+            resultado['_cvm_dfp_url'] = (
+                f"https://dados.cvm.gov.br/dados/CIA_ABERTA/DOC/DFP/DADOS/"
+            )
+    except Exception:
+        pass
+
+    # ── 5. Notícias recentes (Google News RSS) ────────────────────
+    try:
+        import urllib.request, urllib.parse
+        from xml.etree import ElementTree as ET
+        noticias = []
+        vistas_cnpj = set()
+        nome_busca = resultado.get('nome_fantasia') or resultado.get('razao_social') or ''
+        ticker_busca = resultado.get('ticker') or ''
+        queries_cnpj = []
+        if ticker_busca:
+            queries_cnpj.append(f'{ticker_busca} resultados crédito B3')
+        if nome_busca:
+            nome_curto = nome_busca.split()[0] if nome_busca else ''
+            queries_cnpj.append(f'{nome_curto} empresa financeiro Brasil')
+        for qr in queries_cnpj[:2]:
+            try:
+                q_enc = urllib.parse.quote(qr)
+                url_n = f'https://news.google.com/rss/search?q={q_enc}&hl=pt-BR&gl=BR&ceid=BR:pt-419'
+                req_n = urllib.request.Request(url_n, headers={'User-Agent': 'Mozilla/5.0'})
+                with urllib.request.urlopen(req_n, timeout=8) as rn:
+                    xml_n = rn.read()
+                root_n = ET.fromstring(xml_n)
+                for item in root_n.findall('.//item')[:6]:
+                    titulo = item.findtext('title','').split(' - ')[0].strip()
+                    if titulo and titulo not in vistas_cnpj:
+                        vistas_cnpj.add(titulo)
+                        noticias.append({
+                            'titulo': titulo,
+                            'link': item.findtext('link',''),
+                            'publicado': item.findtext('pubDate',''),
+                        })
+            except Exception:
+                continue
+        resultado['noticias_recentes'] = noticias[:8]
+    except Exception as e:
+        resultado['noticias_recentes'] = []
+        resultado['_erro_noticias'] = str(e)
+
+    # ── 6. Verificação de situação cadastral e alertas ────────────
+    alertas = []
+    sit = resultado.get('situacao','').upper()
+    if sit and sit not in ('ATIVA','ATIVO','REGULAR'):
+        alertas.append(f'⚠ Situação cadastral: {sit}')
+    if resultado.get('situacao_cvm') and resultado['situacao_cvm'].upper() not in ('A','ATIVO','ATIVA','NORMAL'):
+        alertas.append(f'⚠ Situação CVM: {resultado["situacao_cvm"]}')
+    capital = resultado.get('capital_social') or 0
+    if capital and capital < 100000:
+        alertas.append('⚠ Capital social muito baixo (< R$ 100 mil)')
+    resultado['alertas'] = alertas
 
     return jsonify(resultado)
 
@@ -1272,32 +1558,61 @@ def index():
 def health():
     return jsonify({'ok': True})
 
-# Cache em memória para textos extraídos dos PDFs (por sessão simples)
-_pdf_cache = {'dfp_text': '', 'fre_text': ''}
+# Cache em memória para textos extraídos dos PDFs (por token de sessão)
+# Suporta múltiplos usuários simultâneos
+import threading
+_pdf_cache_lock = threading.Lock()
+_pdf_cache_store = {}  # {session_token: {'dfp_text': '', 'fre_text': '', 'ts': float}}
+_pdf_cache = {'dfp_text': '', 'fre_text': ''}  # fallback legado
+
+def _get_session_token(req):
+    return req.headers.get('X-Session-Token') or req.args.get('session') or 'default'
+
+def _get_pdf_cache(token='default'):
+    with _pdf_cache_lock:
+        return dict(_pdf_cache_store.get(token, {'dfp_text': '', 'fre_text': ''}))
+
+def _set_pdf_cache(token, key, value):
+    import time
+    with _pdf_cache_lock:
+        if token not in _pdf_cache_store:
+            _pdf_cache_store[token] = {'dfp_text': '', 'fre_text': '', 'ts': time.time()}
+        _pdf_cache_store[token][key] = value
+        _pdf_cache_store[token]['ts'] = time.time()
+        # Limpar tokens com mais de 2h
+        cutoff = time.time() - 7200
+        expired = [k for k, v in _pdf_cache_store.items() if v.get('ts', 0) < cutoff]
+        for k in expired:
+            del _pdf_cache_store[k]
 
 @app.route('/api/upload', methods=['POST'])
 def upload():
     result = {'dfp': {}, 'fre': {}, 'errors': [], 'success': False}
+    session_tok = _get_session_token(request)
     if 'dfp' in request.files:
         f = request.files['dfp']
         try:
             text = extract_text_pdf(f)
-            _pdf_cache['dfp_text'] = text
+            _set_pdf_cache(session_tok, 'dfp_text', text)
+            _pdf_cache['dfp_text'] = text  # backward compat
             result['dfp'] = parse_dfp(text)
             result['dfp']['_nome'] = f.filename
             result['dfp']['_chars'] = len(text)
             result['dfp']['_extraiu'] = sum(1 for v in result['dfp'].values() if v and str(v) not in ('', 'None', '0'))
         except Exception as e:
-            result['errors'].append(f'DFP: {str(e)}')
+            import traceback
+            result['errors'].append(f'DFP: {str(e)} — {traceback.format_exc()[-200:]}')
     if 'fre' in request.files:
         f = request.files['fre']
         try:
             text = extract_text_pdf(f)
-            _pdf_cache['fre_text'] = text
+            _set_pdf_cache(session_tok, 'fre_text', text)
+            _pdf_cache['fre_text'] = text  # backward compat
             result['fre'] = parse_fre(text)
             result['fre']['_nome'] = f.filename
         except Exception as e:
-            result['errors'].append(f'FRE: {str(e)}')
+            import traceback
+            result['errors'].append(f'FRE: {str(e)} — {traceback.format_exc()[-200:]}')
     result['success'] = len(result['errors']) == 0
     return jsonify(result)
 
@@ -1339,6 +1654,25 @@ def generate():
     macro.setdefault('hrc', 575)
     macro.setdefault('treasury_10y', 4.30)
     macro.setdefault('spread_alvo', 425)
+    macro.setdefault('brent', 78)
+    # Detectar setor automaticamente se não fornecido
+    if not macro.get('setor'):
+        setor_detect = _setor_do_texto(
+            dfp_data.get('descricao','') or macro.get('empresa_segmentos',''),
+            macro.get('empresa_ticker','')
+        )
+        if setor_detect:
+            macro['setor'] = setor_detect
+    # Calcular scores avançados e incluir no macro para uso no PDF
+    try:
+        _pf = calcular_piotroski(dfp_data)
+        _dscr = calcular_dscr(dfp_data, fre_data)
+        _div_sust = calcular_dividend_sustainability(dfp_data)
+        macro['_piotroski'] = _pf
+        macro['_dscr'] = _dscr
+        macro['_dividend_sust'] = _div_sust
+    except Exception:
+        pass
     try:
         pdf_bytes = gerar_pdf(dfp_data, fre_data, macro)
         _salvar_relatorio(pdf_bytes, macro)
@@ -1596,6 +1930,262 @@ def calcular_zscore(dfp_data, market_cap_bi=None):
     except:
         return None
 
+
+
+# ══════════════════════════════════════════════════════════════════
+# PIOTROSKI F-SCORE (9 pontos)
+# Sistema desenvolvido por Joseph Piotroski (2000)
+# Avalia qualidade financeira em 3 dimensões: Rentabilidade, Alavancagem/Liquidez, Eficiência Operacional
+# ══════════════════════════════════════════════════════════════════
+def calcular_piotroski(dfp_data, dfp_anterior=None):
+    """
+    Calcula Piotroski F-Score (0-9).
+    0-2 = empresa fraca, 7-9 = empresa forte.
+    dfp_anterior: dados do período anterior (para calcular variações).
+    """
+    d = dfp_data
+    dp = dfp_anterior or {}
+
+    pontos = {}
+    detalhes = []
+
+    # ── PILAR 1: RENTABILIDADE (4 pontos) ─────────────────────────
+    # F1: ROA positivo (Lucro Líquido / Ativo Total)
+    ll = d.get('lucro_liquido') or 0
+    at = d.get('ativo_total') or 0
+    roa = ll / at if at > 0 else 0
+    pontos['F1_ROA'] = 1 if roa > 0 else 0
+    detalhes.append({'criterio': 'F1 — ROA positivo', 'valor': f'{roa*100:.2f}%', 'ponto': pontos['F1_ROA'],
+                     'desc': 'Lucro líquido / Ativo total > 0'})
+
+    # F2: FCO positivo
+    fco = d.get('fco') or 0
+    pontos['F2_FCO'] = 1 if fco > 0 else 0
+    detalhes.append({'criterio': 'F2 — FCO positivo', 'valor': f'{fco:,.0f}', 'ponto': pontos['F2_FCO'],
+                     'desc': 'Fluxo de caixa operacional > 0'})
+
+    # F3: Melhora do ROA (comparar com período anterior)
+    roa_ant = (dp.get('lucro_liquido', 0) or 0) / (dp.get('ativo_total', 1) or 1) if dp else None
+    if roa_ant is not None:
+        pontos['F3_DELTA_ROA'] = 1 if roa > roa_ant else 0
+        detalhes.append({'criterio': 'F3 — ROA melhorou', 'valor': f'{roa*100:.2f}% vs {roa_ant*100:.2f}%',
+                         'ponto': pontos['F3_DELTA_ROA'], 'desc': 'ROA atual > ROA anterior'})
+    else:
+        pontos['F3_DELTA_ROA'] = 0
+        detalhes.append({'criterio': 'F3 — ROA melhorou', 'valor': 'Sem período anterior',
+                         'ponto': 0, 'desc': 'Requer dados do período anterior'})
+
+    # F4: Accrual (FCO > ROA — qualidade do lucro)
+    accrual = roa - (fco / at if at > 0 else 0)
+    pontos['F4_ACCRUAL'] = 1 if fco / at > roa and at > 0 else 0
+    detalhes.append({'criterio': 'F4 — FCO > ROA (qualidade do lucro)', 'valor': f'FCO/AT={fco/at*100:.2f}% vs ROA={roa*100:.2f}%' if at > 0 else 'AT=0',
+                     'ponto': pontos['F4_ACCRUAL'], 'desc': 'FCO/Ativo > ROA (lucro de caixa, não contábil)'})
+
+    # ── PILAR 2: ALAVANCAGEM / LIQUIDEZ (3 pontos) ────────────────
+    # F5: Redução de alavancagem (Dívida Longo Prazo / Ativo Total)
+    dlp = (d.get('passivo_nao_circulante') or d.get('divida_bruta') or 0)
+    lev = dlp / at if at > 0 else 0
+    dlp_ant = (dp.get('passivo_nao_circulante') or dp.get('divida_bruta') or 0) if dp else None
+    at_ant = (dp.get('ativo_total') or at) if dp else at
+    lev_ant = dlp_ant / at_ant if (dlp_ant is not None and at_ant > 0) else None
+    if lev_ant is not None:
+        pontos['F5_LEVER'] = 1 if lev < lev_ant else 0
+        detalhes.append({'criterio': 'F5 — Alavancagem reduziu', 'valor': f'{lev:.3f} vs {lev_ant:.3f}',
+                         'ponto': pontos['F5_LEVER'], 'desc': 'Dívida LP / Ativo caiu'})
+    else:
+        pontos['F5_LEVER'] = 1 if lev < 0.5 else 0
+        detalhes.append({'criterio': 'F5 — Alavancagem (LP/AT)', 'valor': f'{lev:.3f}',
+                         'ponto': pontos['F5_LEVER'], 'desc': 'Sem período anterior — bonus se < 0,5'})
+
+    # F6: Melhora de liquidez corrente
+    ac = d.get('ativo_circulante') or 0
+    pc = d.get('passivo_circulante') or 0
+    liq_c = ac / pc if pc > 0 else 2.0
+    ac_ant = (dp.get('ativo_circulante') or ac) if dp else ac
+    pc_ant = (dp.get('passivo_circulante') or pc) if dp else pc
+    liq_c_ant = ac_ant / pc_ant if pc_ant > 0 else 2.0
+    pontos['F6_LIQUID'] = 1 if liq_c >= liq_c_ant else 0
+    detalhes.append({'criterio': 'F6 — Liquidez corrente melhorou', 'valor': f'{liq_c:.2f} vs {liq_c_ant:.2f}',
+                     'ponto': pontos['F6_LIQUID'], 'desc': 'Ativo Circ / Passivo Circ atual ≥ anterior'})
+
+    # F7: Sem emissão de novas ações (diluição)
+    acoes = d.get('acoes_emitidas') or 0
+    acoes_ant = (dp.get('acoes_emitidas') or acoes) if dp else acoes
+    pontos['F7_SHARES'] = 1 if acoes <= acoes_ant or acoes_ant == 0 else 0
+    detalhes.append({'criterio': 'F7 — Sem emissão de ações', 'valor': f'{acoes:,.0f} vs {acoes_ant:,.0f}',
+                     'ponto': pontos['F7_SHARES'], 'desc': 'Nº ações não aumentou (sem diluição)'})
+
+    # ── PILAR 3: EFICIÊNCIA OPERACIONAL (2 pontos) ────────────────
+    # F8: Melhora de margem bruta
+    rl = d.get('receita_liquida') or 0
+    lb = d.get('lucro_bruto') or 0
+    mg_b = lb / rl if rl > 0 else 0
+    rl_ant = (dp.get('receita_liquida') or rl) if dp else rl
+    lb_ant = (dp.get('lucro_bruto') or lb) if dp else lb
+    mg_b_ant = lb_ant / rl_ant if rl_ant > 0 else 0
+    pontos['F8_GROSS_MG'] = 1 if mg_b >= mg_b_ant else 0
+    detalhes.append({'criterio': 'F8 — Margem bruta melhorou', 'valor': f'{mg_b*100:.1f}% vs {mg_b_ant*100:.1f}%',
+                     'ponto': pontos['F8_GROSS_MG'], 'desc': 'Lucro Bruto / Receita atual ≥ anterior'})
+
+    # F9: Melhora de giro do ativo
+    giro = rl / at if at > 0 else 0
+    rl_ant2 = (dp.get('receita_liquida') or rl) if dp else rl
+    at_ant2 = (dp.get('ativo_total') or at) if dp else at
+    giro_ant = rl_ant2 / at_ant2 if at_ant2 > 0 else 0
+    pontos['F9_ASSET_TURN'] = 1 if giro >= giro_ant else 0
+    detalhes.append({'criterio': 'F9 — Giro do ativo melhorou', 'valor': f'{giro:.3f} vs {giro_ant:.3f}',
+                     'ponto': pontos['F9_ASSET_TURN'], 'desc': 'Receita / Ativo Total atual ≥ anterior'})
+
+    f_score = sum(pontos.values())
+
+    if f_score >= 7:   qualidade = 'FORTE'
+    elif f_score >= 5: qualidade = 'MODERADA'
+    elif f_score >= 3: qualidade = 'FRACA'
+    else:              qualidade = 'MUITO FRACA'
+
+    return {
+        'f_score': f_score,
+        'qualidade': qualidade,
+        'pontos': pontos,
+        'detalhes': detalhes,
+        'pilares': {
+            'rentabilidade': sum(pontos.get(k, 0) for k in ['F1_ROA','F2_FCO','F3_DELTA_ROA','F4_ACCRUAL']),
+            'alavancagem_liquidez': sum(pontos.get(k, 0) for k in ['F5_LEVER','F6_LIQUID','F7_SHARES']),
+            'eficiencia': sum(pontos.get(k, 0) for k in ['F8_GROSS_MG','F9_ASSET_TURN']),
+        },
+        'interpretacao': {
+            'FORTE': 'Empresa financeiramente sólida — alta qualidade',
+            'MODERADA': 'Empresa em situação intermediária — monitorar',
+            'FRACA': 'Sinais de fragilidade financeira — cautela',
+            'MUITO FRACA': 'Alta probabilidade de deterioração — evitar exposição',
+        }[qualidade]
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# DSCR — DEBT SERVICE COVERAGE RATIO
+# Métrica central de crédito corporativo (bancos e bonds)
+# ══════════════════════════════════════════════════════════════════
+def calcular_dscr(dfp_data, fre_data=None):
+    """
+    DSCR = FCO / (Amortização + Juros Pagos)
+    DSCR > 1.25 = saudável | 1.0-1.25 = monitorar | < 1.0 = risco de default
+    """
+    fco    = dfp_data.get('fco') or 0
+    juros  = dfp_data.get('juros_pagos') or 0
+    venc   = (fre_data or {}).get('vencimentos') or {}
+    # Amortizações do próximo ano
+    amort  = venc.get('2026') or venc.get('2025') or 0
+    debt_service = juros + amort
+
+    if debt_service <= 0:
+        # Fallback: usar resultado financeiro
+        res_fin = abs(dfp_data.get('resultado_financeiro') or 0)
+        debt_service = res_fin
+
+    if debt_service <= 0 or fco == 0:
+        return None
+
+    dscr_val = fco / debt_service
+
+    if dscr_val >= 1.5:   nivel = 'SEGURO'
+    elif dscr_val >= 1.25: nivel = 'ADEQUADO'
+    elif dscr_val >= 1.0:  nivel = 'LIMITE'
+    else:                  nivel = 'RISCO'
+
+    return {
+        'dscr': round(dscr_val, 3),
+        'nivel': nivel,
+        'fco': fco,
+        'juros_pagos': juros,
+        'amortizacao_cp': amort,
+        'debt_service': debt_service,
+        'interpretacao': {
+            'SEGURO': 'DSCR ≥ 1,5 — FCO cobre confortavelmente o serviço da dívida',
+            'ADEQUADO': 'DSCR 1,25-1,5 — FCO cobre o serviço da dívida com margem',
+            'LIMITE': 'DSCR 1,0-1,25 — FCO mal cobre o serviço da dívida, sem margem de segurança',
+            'RISCO': 'DSCR < 1,0 — FCO INSUFICIENTE para cobrir o serviço da dívida',
+        }[nivel]
+    }
+
+
+# ══════════════════════════════════════════════════════════════════
+# SCORE DE SUSTENTABILIDADE DE DIVIDENDOS
+# ══════════════════════════════════════════════════════════════════
+def calcular_dividend_sustainability(dfp_data):
+    """
+    Avalia se os dividendos são sustentáveis com base em:
+    - Payout ratio vs. FCO (não vs. lucro contábil)
+    - Dívida / EBITDA (empresas alavancadas não deveriam pagar dividendos altos)
+    - Histórico de crescimento de FCO
+    Retorna score 0-10 e nível de sustentabilidade.
+    """
+    ll       = dfp_data.get('lucro_liquido') or 0
+    fco      = dfp_data.get('fco') or 0
+    div_pago = dfp_data.get('dividendos_pagos') or 0
+    eb       = dfp_data.get('ebitda_ajustado') or 0
+    dl       = dfp_data.get('divida_liquida') or 0
+    capex    = dfp_data.get('capex') or 0
+
+    if div_pago == 0:
+        return {'nivel': 'SEM DIVIDENDOS', 'score': None, 'payout_fco': None,
+                'free_cash_flow': None, 'interpretacao': 'Empresa não pagou dividendos no período.'}
+
+    fcl = fco - capex  # Free Cash Flow (FCO - CAPEX)
+    payout_lucro = div_pago / ll if ll > 0 else 999
+    payout_fco   = div_pago / fco if fco > 0 else 999
+    payout_fcl   = div_pago / fcl if fcl > 0 else 999
+    alav         = dl / eb if eb > 0 else 99
+
+    score = 10
+    flags = []
+
+    if payout_fco > 1.0:
+        score -= 3
+        flags.append(f'Payout FCO > 100% ({payout_fco*100:.0f}%) — dividendo pago com endividamento')
+    elif payout_fco > 0.8:
+        score -= 1
+        flags.append(f'Payout FCO alto ({payout_fco*100:.0f}%) — pouca margem de segurança')
+
+    if payout_fcl > 1.0:
+        score -= 2
+        flags.append(f'Payout FCL > 100% ({payout_fcl*100:.0f}%) — sem FCL após CAPEX')
+
+    if alav > 3.5:
+        score -= 2
+        flags.append(f'Alavancagem {alav:.1f}x — DL/EBITDA elevado limita distribuição')
+    elif alav > 2.5:
+        score -= 1
+        flags.append(f'Alavancagem {alav:.1f}x — monitorar capacidade de distribuição')
+
+    if fco < 0:
+        score -= 3
+        flags.append('FCO negativo — dividendo insustentável')
+
+    score = max(0, min(10, score))
+
+    if score >= 8:   nivel = 'ALTA SUSTENTABILIDADE'
+    elif score >= 6: nivel = 'MODERADA'
+    elif score >= 4: nivel = 'BAIXA'
+    else:            nivel = 'INSUSTENTÁVEL'
+
+    return {
+        'nivel': nivel,
+        'score': score,
+        'payout_lucro': round(payout_lucro * 100, 1) if ll > 0 else None,
+        'payout_fco': round(payout_fco * 100, 1) if fco > 0 else None,
+        'payout_fcl': round(payout_fcl * 100, 1) if fcl > 0 else None,
+        'free_cash_flow': fcl,
+        'dividendos_pagos': div_pago,
+        'flags': flags,
+        'interpretacao': {
+            'ALTA SUSTENTABILIDADE': 'Dividendos cobertos pelo FCO e FCL — distribuição saudável',
+            'MODERADA': 'Dividendos pagos mas com margem limitada — acompanhar',
+            'BAIXA': 'Riscos de sustentabilidade — dividendo pode ser cortado',
+            'INSUSTENTÁVEL': 'Dividendo insustentável — risco de suspensão',
+        }.get(nivel, nivel)
+    }
+
 # ══════════════════════════════════════════════════════════════════
 # ROTA: /api/peers/<ticker>
 # ══════════════════════════════════════════════════════════════════
@@ -1655,10 +2245,19 @@ def scorecard():
     setor = body.get('setor', 'default')
     market_cap_bi = body.get('market_cap_bi')
 
-    sc = calcular_scorecard(dfp_data, setor)
-    zs = calcular_zscore(dfp_data, market_cap_bi)
+    sc  = calcular_scorecard(dfp_data, setor)
+    zs  = calcular_zscore(dfp_data, market_cap_bi)
+    pf  = calcular_piotroski(dfp_data, body.get('dfp_anterior'))
+    dscr = calcular_dscr(dfp_data, body.get('fre', {}))
+    div_sust = calcular_dividend_sustainability(dfp_data)
 
-    return jsonify({'scorecard': sc, 'zscore': zs})
+    return jsonify({
+        'scorecard': sc,
+        'zscore': zs,
+        'piotroski': pf,
+        'dscr': dscr,
+        'dividend_sustainability': div_sust,
+    })
 
 # ══════════════════════════════════════════════════════════════════
 # ROTA: /api/historico/<ticker>
@@ -1901,8 +2500,253 @@ def _salvar_relatorio(pdf_bytes, macro):
         data['relatorios'] = data['relatorios'][:50]
         with open(meta_file,'w') as f:
             json.dump(data, f, ensure_ascii=False)
-    except:
-        pass
+    except Exception as e:
+        import traceback
+        print(f'[WARN] _salvar_relatorio: {e}\n{traceback.format_exc()}')
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CVM DFP AUTO-DOWNLOAD — integração com cvm_dfp.py
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _importar_cvm_dfp():
+    """Importa o módulo cvm_dfp.py de forma lazy para não quebrar a app se ausente."""
+    try:
+        import importlib.util, sys
+        # Tenta importar do mesmo diretório da app
+        base = os.path.dirname(os.path.abspath(__file__))
+        spec = importlib.util.spec_from_file_location('cvm_dfp', os.path.join(base, 'cvm_dfp.py'))
+        if spec is None:
+            return None
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules['cvm_dfp'] = mod
+        spec.loader.exec_module(mod)
+        return mod
+    except Exception as e:
+        print(f'[AVISO] cvm_dfp.py não encontrado ou com erro: {e}')
+        return None
+
+
+@app.route('/api/cvm-dfp/<cnpj>')
+def api_cvm_dfp(cnpj):
+    """
+    Busca dados financeiros (DFP/ITR) da CVM para um CNPJ.
+
+    Query params:
+      ano=2024          (opcional, padrão = ano anterior)
+      trimestral=1      (opcional, força busca de ITR em vez de DFP anual)
+
+    Retorna campos financeiros extraídos (mesma estrutura esperada por /api/generate):
+      receita_liquida, lucro_liquido, ebitda, ativo_total, patrimonio_liquido,
+      divida_bruta, caixa, fco, capex, dividendos_pagos, etc.
+    """
+    cvm = _importar_cvm_dfp()
+    if cvm is None:
+        return jsonify({'error': 'Módulo cvm_dfp.py não disponível. Verifique se o arquivo está na pasta da aplicação.'}), 503
+
+    cnpj_clean = re.sub(r'\D', '', cnpj)
+    if len(cnpj_clean) != 14:
+        return jsonify({'error': 'CNPJ inválido — informe 14 dígitos.'}), 400
+
+    # Formata com máscara
+    cnpj_fmt = f'{cnpj_clean[:2]}.{cnpj_clean[2:5]}.{cnpj_clean[5:8]}/{cnpj_clean[8:12]}-{cnpj_clean[12:]}'
+
+    from datetime import datetime as _dt
+    ano_param = request.args.get('ano')
+    trimestral = request.args.get('trimestral', '0') == '1'
+
+    try:
+        ano = int(ano_param) if ano_param else _dt.now().year - 1
+    except ValueError:
+        return jsonify({'error': 'Parâmetro ano inválido.'}), 400
+
+    try:
+        dados = cvm.buscar_dfp_por_cnpj(cnpj_fmt, ano, trimestral=trimestral)
+    except Exception as e:
+        import traceback
+        print(f'[ERRO] api_cvm_dfp {cnpj_fmt}: {e}\n{traceback.format_exc()}')
+        return jsonify({'error': f'Erro ao buscar dados CVM: {str(e)}'}), 500
+
+    if not dados or dados.get('erro'):
+        return jsonify({
+            'aviso': dados.get('erro', 'Nenhum dado encontrado na CVM para este CNPJ.'),
+            'cnpj': cnpj_fmt,
+            'ano': ano,
+            'dados': {}
+        }), 200
+
+    return jsonify({
+        'cnpj': cnpj_fmt,
+        'ano': ano,
+        'trimestral': trimestral,
+        'razao_social': dados.get('razao_social', ''),
+        'cod_cvm': dados.get('cod_cvm', ''),
+        'dados': dados,
+    })
+
+
+@app.route('/api/cvm-dfp/ticker/<ticker>')
+def api_cvm_dfp_ticker(ticker):
+    """
+    Busca dados financeiros (DFP/ITR) da CVM pelo ticker B3.
+
+    Query params: mesmo que /api/cvm-dfp/<cnpj>
+    """
+    cvm = _importar_cvm_dfp()
+    if cvm is None:
+        return jsonify({'error': 'Módulo cvm_dfp.py não disponível.'}), 503
+
+    tk = ticker.upper().strip()
+    from datetime import datetime as _dt
+    ano_param = request.args.get('ano')
+    trimestral = request.args.get('trimestral', '0') == '1'
+
+    try:
+        ano = int(ano_param) if ano_param else _dt.now().year - 1
+    except ValueError:
+        return jsonify({'error': 'Parâmetro ano inválido.'}), 400
+
+    try:
+        dados = cvm.buscar_dfp_por_ticker(tk, ano, trimestral=trimestral)
+    except Exception as e:
+        import traceback
+        print(f'[ERRO] api_cvm_dfp_ticker {tk}: {e}\n{traceback.format_exc()}')
+        return jsonify({'error': f'Erro ao buscar dados CVM: {str(e)}'}), 500
+
+    if not dados or dados.get('erro'):
+        return jsonify({
+            'aviso': dados.get('erro', f'Ticker {tk} não encontrado no mapa CNPJ ou sem dados CVM.'),
+            'ticker': tk,
+            'dados': {}
+        }), 200
+
+    return jsonify({
+        'ticker': tk,
+        'ano': ano,
+        'trimestral': trimestral,
+        'razao_social': dados.get('razao_social', ''),
+        'cnpj': dados.get('cnpj', ''),
+        'cod_cvm': dados.get('cod_cvm', ''),
+        'dados': dados,
+    })
+
+
+@app.route('/api/risco-cadastral/<cnpj>')
+def api_risco_cadastral(cnpj):
+    """
+    Consolida dados de risco cadastral gratuitos para um CNPJ:
+      - Situação cadastral (BrasilAPI / ReceitaWS)
+      - Situação CVM (ativa, suspensa, cancelada)
+      - Processos judiciais (DataJud/CNJ)
+      - Notícias negativas (Google News RSS: recuperação judicial, falência, protesto)
+      - Score de risco 0-10 e nível (BAIXO / MÉDIO / ALTO / CRÍTICO)
+
+    Resposta:
+      {
+        "cnpj": "xx.xxx.xxx/xxxx-xx",
+        "score_risco": float,      # 0 = sem risco, 10 = risco máximo
+        "nivel_risco": str,        # BAIXO | MÉDIO | ALTO | CRÍTICO
+        "situacao_receita": str,
+        "situacao_cvm": str,
+        "processos_judiciais": int,
+        "noticias_negativas": [...],
+        "alertas": [...],
+        "detalhes": {...}
+      }
+    """
+    cvm = _importar_cvm_dfp()
+    if cvm is None:
+        return jsonify({'error': 'Módulo cvm_dfp.py não disponível.'}), 503
+
+    cnpj_clean = re.sub(r'\D', '', cnpj)
+    if len(cnpj_clean) != 14:
+        return jsonify({'error': 'CNPJ inválido — informe 14 dígitos.'}), 400
+
+    cnpj_fmt = f'{cnpj_clean[:2]}.{cnpj_clean[2:5]}.{cnpj_clean[5:8]}/{cnpj_clean[8:12]}-{cnpj_clean[12:]}'
+
+    try:
+        resultado = cvm.buscar_risco_cadastral(cnpj_fmt)
+    except Exception as e:
+        import traceback
+        print(f'[ERRO] api_risco_cadastral {cnpj_fmt}: {e}\n{traceback.format_exc()}')
+        return jsonify({'error': f'Erro ao buscar risco cadastral: {str(e)}'}), 500
+
+    return jsonify(resultado)
+
+
+@app.route('/api/auto-preencher/<cnpj>')
+def api_auto_preencher(cnpj):
+    """
+    Rota de conveniência para o frontend: busca CNPJ cadastral + DFP CVM
+    em uma única chamada e retorna um dict pronto para pré-preencher o formulário.
+
+    Retorna:
+      {
+        "empresa_nome": str,
+        "empresa_ticker": str,
+        "setor": str,
+        "campos_dfp": { ... }  # todos os campos financeiros disponíveis
+        "score_risco": float,
+        "nivel_risco": str,
+        "alertas": [...]
+      }
+    """
+    cvm_mod = _importar_cvm_dfp()
+    cnpj_clean = re.sub(r'\D', '', cnpj)
+    if len(cnpj_clean) != 14:
+        return jsonify({'error': 'CNPJ inválido.'}), 400
+    cnpj_fmt = f'{cnpj_clean[:2]}.{cnpj_clean[2:5]}.{cnpj_clean[5:8]}/{cnpj_clean[8:12]}-{cnpj_clean[12:]}'
+
+    from datetime import datetime as _dt
+    resultado = {'cnpj': cnpj_fmt}
+
+    # 1. Dados cadastrais (rota /api/cnpj já existente — chama internamente)
+    try:
+        import requests as _req
+        port = int(os.environ.get('PORT', 5000))
+        r = _req.get(f'http://localhost:{port}/api/cnpj/{cnpj_clean}', timeout=15)
+        if r.ok:
+            cad = r.json()
+            resultado['empresa_nome']   = cad.get('razao_social', '')
+            resultado['empresa_ticker'] = cad.get('ticker', '')
+            resultado['setor']          = cad.get('setor', '')
+            resultado['alertas']        = cad.get('alertas', [])
+    except Exception as e:
+        print(f'[AVISO] auto-preencher cadastral: {e}')
+        resultado.setdefault('alertas', [])
+
+    # 2. DFP CVM
+    if cvm_mod:
+        try:
+            ano = _dt.now().year - 1
+            dados_dfp = cvm_mod.buscar_dfp_por_cnpj(cnpj_fmt, ano)
+            if dados_dfp and not dados_dfp.get('erro'):
+                resultado['campos_dfp'] = dados_dfp
+                resultado['razao_social_cvm'] = dados_dfp.get('razao_social', '')
+                resultado['cod_cvm'] = dados_dfp.get('cod_cvm', '')
+            else:
+                resultado['campos_dfp'] = {}
+                resultado['aviso_dfp'] = (dados_dfp or {}).get('erro', 'Sem dados DFP disponíveis na CVM.')
+        except Exception as e:
+            print(f'[AVISO] auto-preencher DFP: {e}')
+            resultado['campos_dfp'] = {}
+    else:
+        resultado['campos_dfp'] = {}
+        resultado['aviso_dfp'] = 'Módulo cvm_dfp.py não disponível.'
+
+    # 3. Risco cadastral (resumido)
+    if cvm_mod:
+        try:
+            risco = cvm_mod.buscar_risco_cadastral(cnpj_fmt)
+            resultado['score_risco'] = risco.get('score_risco_cadastral', 0)
+            resultado['nivel_risco'] = risco.get('nivel_risco_cadastral', 'BAIXO')
+            # Mescla alertas
+            alertas_risco = risco.get('alertas', [])
+            resultado['alertas'] = resultado.get('alertas', []) + alertas_risco
+        except Exception as e:
+            print(f'[AVISO] auto-preencher risco: {e}')
+
+    return jsonify(resultado)
+
 
 if __name__ == '__main__':
     print('\n🚀  Dashboard Análise de Crédito → http://localhost:5000\n')
